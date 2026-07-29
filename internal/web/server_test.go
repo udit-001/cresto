@@ -35,6 +35,7 @@ func (fakeLLMClient) Extract([]byte) (*llm.Extraction, error) {
 func (fakeLLMClient) Classify(ext *llm.Extraction, _ []llm.CanonicalRef) (*llm.Classification, error) {
 	return nil, nil // pipeline falls back to keyword mapper
 }
+func (fakeLLMClient) UpdateConfig(_, _, _ string) {}
 
 // newTestServer returns a Server backed by a temp SQLite DB. The LLM client is
 // real but never hit in these tests (no uploads); they exercise the review

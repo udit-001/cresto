@@ -69,6 +69,7 @@ func WithIdleTimeout(d time.Duration) Option {
 type Client struct {
 	baseURL string
 	model   string
+	apiKey  string
 	http    *http.Client
 
 	// Lifecycle state — all guarded by mu.
@@ -95,6 +96,33 @@ func NewClient(baseURL, model string, opts ...Option) *Client {
 		opt(c)
 	}
 	return c
+}
+
+// WithAPIKey sets an API key sent as a Bearer token on all requests. Used
+// when connecting to a remote LM Studio instance that requires authentication.
+func WithAPIKey(key string) Option {
+	return func(c *Client) { c.apiKey = key }
+}
+
+// UpdateConfig hot-swaps the endpoint URL, model name, and API key without
+// restarting the server. Resets the internal state so the next Health() or
+// Extract() call probes the new endpoint. Called from the settings page when
+// the user changes the LLM Studio configuration.
+func (c *Client) UpdateConfig(baseURL, model, apiKey string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.baseURL = baseURL
+	c.model = model
+	c.apiKey = apiKey
+	c.state = stateServerDown
+	c.instanceID = ""
+}
+
+// setAuth stamps the Authorization header on a request if an API key is set.
+func (c *Client) setAuth(req *http.Request) {
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 }
 
 // Start launches the idle-unload timer. Call once after wiring the server;
@@ -204,7 +232,12 @@ func (c *Client) probeState() string {
 	client := &http.Client{Timeout: 2 * time.Second}
 	v0Base := strings.TrimSuffix(c.baseURL, "/v1") + "/api/v0"
 	reqURL := v0Base + "/models/" + url.PathEscape(c.model)
-	resp, err := client.Get(reqURL)
+	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	if err != nil {
+		return stateServerDown
+	}
+	c.setAuth(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return stateServerDown
 	}
@@ -325,6 +358,7 @@ func (c *Client) loadModelHTTPRequest(ctx context.Context) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	c.setAuth(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return "", err
@@ -356,6 +390,7 @@ func (c *Client) unloadModel(ctx context.Context, instanceID string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	c.setAuth(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return err
@@ -482,6 +517,7 @@ func (c *Client) chatCompletion(reqBody []byte) ([]byte, error) {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	c.setAuth(req)
 
 	resp, err := c.http.Do(req)
 	if err != nil {

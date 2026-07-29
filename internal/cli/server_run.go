@@ -39,7 +39,7 @@ func runServer(cfg config.Config, addr string, silent bool) error {
 	}
 	defer st.Close()
 
-	client := llm.NewClient(cfg.LMStudioBaseURL, cfg.ModelName)
+	client := llm.NewClient(cfg.LMStudioBaseURL, cfg.ModelName, llm.WithAPIKey(cfg.LMStudioAPIKey))
 	client.Start()
 	defer client.Stop()
 	pdfs := pdfstore.New(cfg.PDFStoragePath)

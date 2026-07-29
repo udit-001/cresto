@@ -98,6 +98,23 @@
           <code class="text-xs">{{.LLMModel}}</code>
         </div>
       </div>
+
+      <!-- Configuration form -->
+      <form method="POST" action="/settings/llm" class="border-t pt-3 space-y-3">
+        <div>
+          <label class="text-sm font-medium" for="llm-url">Endpoint URL</label>
+          <input type="text" id="llm-url" name="base_url" value="{{.LLMURL}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-sm" placeholder="http://localhost:1234/v1">
+        </div>
+        <div>
+          <label class="text-sm font-medium" for="llm-model">Model</label>
+          <input type="text" id="llm-model" name="model" value="{{.LLMModel}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-sm" placeholder="mistralai/ministral-3-3b">
+        </div>
+        <div>
+          <label class="text-sm font-medium" for="llm-key">API Key <span class="text-muted-foreground font-normal">(optional — for remote instances)</span></label>
+          <input type="password" id="llm-key" name="api_key" value="{{.LLMAPIKey}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-sm" placeholder="Leave empty for local LM Studio">
+        </div>
+        <button type="submit" class="btn" data-size="sm">Save</button>
+      </form>
     </div>
   </section>
 

@@ -11,6 +11,7 @@ import (
 
 type Config struct {
 	LMStudioBaseURL string `toml:"lm_studio_base_url"`
+	LMStudioAPIKey  string `toml:"lm_studio_api_key"`
 	ModelName       string `toml:"model_name"`
 	DataDir         string `toml:"data_dir"`
 	Port            int    `toml:"port"`

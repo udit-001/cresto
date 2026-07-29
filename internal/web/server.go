@@ -377,6 +377,7 @@ type LLMClient interface {
 	Classify(ext *llm.Extraction, canonicals []llm.CanonicalRef) (*llm.Classification, error)
 	Start()
 	Stop()
+	UpdateConfig(baseURL, model, apiKey string)
 }
 
 // Server is the HTTP layer. Construct with New; one instance serves all routes.
@@ -495,6 +496,7 @@ func (s *Server) Routes() *http.ServeMux {
 
 	// Settings: broker + LLM connection management (PF-64).
 	mux.HandleFunc("GET /settings", s.handleSettings)
+	mux.HandleFunc("POST /settings/llm", s.handleSettingsLLM)
 
 	// Static assets: CSS, JS. fs.Sub scopes the embed to /static.
 	staticFS, err := fs.Sub(contentFS, "static")

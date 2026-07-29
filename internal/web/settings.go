@@ -2,20 +2,23 @@ package web
 
 import (
 	"net/http"
+
+	"cresto/internal/config"
 )
 
 // settingsView is the view model for the /settings page. Groups all external
 // service connections: brokers (Groww + Kite) and the LLM Studio endpoint.
 type settingsView struct {
-	Groww      brokerStatus
-	Kite       brokerStatus
-	LLMURL     string
-	LLMModel   string
-	LLMHealth  string // raw state from llmClient.Health(): loaded, server_down, etc.
+	Groww     brokerStatus
+	Kite      brokerStatus
+	LLMURL    string
+	LLMModel  string
+	LLMAPIKey string // current API key (empty for local, no-auth setups)
+	LLMHealth string // raw state from llmClient.Health(): loaded, server_down, etc.
 }
 
 // handleSettings renders the settings page with broker connection management
-// (moved from /portfolio) and the LLM Studio status display.
+// and the LLM Studio status + configuration form.
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	pending, _ := s.store.ListPendingReview(ctx)
@@ -31,6 +34,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		},
 		LLMURL:    s.cfg.LMStudioBaseURL,
 		LLMModel:  s.cfg.ModelName,
+		LLMAPIKey: s.cfg.LMStudioAPIKey,
 		LLMHealth: s.llmClient.Health(),
 	}
 
@@ -41,4 +45,36 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		pageData:     pageData{Title: "Settings", PendingCount: len(pending), ActiveBatchID: s.activeBatchID(ctx), Active: "settings"},
 		settingsView: v,
 	})
+}
+
+// handleSettingsLLM saves the LLM Studio configuration from the settings form.
+// Persists to the TOML config file and hot-reloads the running LLM client
+// with the new endpoint, model, and API key — no server restart needed.
+func (s *Server) handleSettingsLLM(w http.ResponseWriter, r *http.Request) {
+	baseURL := r.FormValue("base_url")
+	model := r.FormValue("model")
+	apiKey := r.FormValue("api_key")
+
+	if baseURL == "" {
+		baseURL = "http://localhost:1234/v1"
+	}
+	if model == "" {
+		model = "mistralai/ministral-3-3b"
+	}
+
+	// Update the in-memory config.
+	s.cfg.LMStudioBaseURL = baseURL
+	s.cfg.ModelName = model
+	s.cfg.LMStudioAPIKey = apiKey
+
+	// Persist to TOML so it survives restarts.
+	if err := config.Save(&s.cfg); err != nil {
+		s.renderError(w, http.StatusInternalServerError, "Could not save config: "+err.Error())
+		return
+	}
+
+	// Hot-reload the running client.
+	s.llmClient.UpdateConfig(baseURL, model, apiKey)
+
+	http.Redirect(w, r, "/settings?toast=LLM settings saved&variant=success", http.StatusSeeOther)
 }
