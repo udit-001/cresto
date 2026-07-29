@@ -53,11 +53,8 @@
             {{if .PendingCount}}<span class="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-mono leading-[16px] text-center tabular-nums">{{.PendingCount}}</span>{{end}}
           </span>
         </a>
-        <a href="/groww" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors {{if eq .Active "groww"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}" data-tooltip="Groww" data-side="right" {{if eq .Active "groww"}}aria-current="page"{{end}}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-3 3"/></svg>
-        </a>
-        <a href="/kite" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors {{if eq .Active "kite"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}" data-tooltip="Kite" data-side="right" {{if eq .Active "kite"}}aria-current="page"{{end}}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 12l10 10 10-10z"/><path d="M12 6v12"/></svg>
+        <a href="/portfolio" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors {{if eq .Active "portfolio"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}" data-tooltip="Portfolio" data-side="right" {{if eq .Active "portfolio"}}aria-current="page"{{end}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
         </a>
 
         <div class="flex-1 min-h-2"></div>

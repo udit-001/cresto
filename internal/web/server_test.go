@@ -1728,13 +1728,13 @@ func TestGroww_SessionExpired_ShowsReconnect(t *testing.T) {
 	}
 }
 
-func TestGroww_NavItemPresent(t *testing.T) {
+func TestPortfolio_NavItemPresent(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
 	rec, _ := doGet(srv, "/")
 	body := rec.Body.String()
-	if !strings.Contains(body, `href="/groww"`) {
-		t.Errorf("missing Groww nav link")
+	if !strings.Contains(body, `href="/portfolio"`) {
+		t.Errorf("missing Portfolio nav link")
 	}
 }
 
@@ -1746,7 +1746,7 @@ func TestGroww_DisconnectRedirects(t *testing.T) {
 		t.Fatalf("status = %d, want 303", rec.Code)
 	}
 	loc := rec.Header().Get("Location")
-	if !strings.HasPrefix(loc, "/groww") {
-		t.Errorf("redirect = %q, want /groww...", loc)
+	if !strings.HasPrefix(loc, "/portfolio") {
+		t.Errorf("redirect = %q, want /portfolio...", loc)
 	}
 }

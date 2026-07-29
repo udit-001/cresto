@@ -387,7 +387,7 @@ type Server struct {
 // New wires the server's dependencies but does not start listening. The caller
 // owns the store, LLMClient, and pdfs lifetimes; closing them is the caller's job.
 func New(s *store.Store, client LLMClient, cfg config.Config, pdfs *pdfstore.Store, growwClient *groww.Client, kiteClient *kite.Client) (*Server, error) {
-	pageNames := []string{"dashboard", "upload", "batch_progress", "payslip_detail", "payslips_list", "component_detail", "annual", "error", "groww", "kite"}
+	pageNames := []string{"dashboard", "upload", "batch_progress", "payslip_detail", "payslips_list", "component_detail", "annual", "error", "groww", "kite", "portfolio"}
 	pages := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {
 		t, err := template.New("").Funcs(tmplFuncs).ParseFS(contentFS,
@@ -473,17 +473,24 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /annual", s.handleAnnual)
 	mux.HandleFunc("GET /pdf/{id}", s.handleServePDF)
 
-	// Groww integration: status page, OAuth connect/disconnect, holdings API.
+	// Groww integration: OAuth connect/disconnect action routes. The /groww
+	// page route still exists (deleted in PF-63 when /portfolio fully replaces
+	// it); connect/disconnect redirect to /portfolio after completion.
 	mux.HandleFunc("GET /groww", s.handleGroww)
 	mux.HandleFunc("GET /groww/connect", s.handleGrowwConnect)
 	mux.HandleFunc("GET /groww/disconnect", s.handleGrowwDisconnect)
 	mux.HandleFunc("GET /api/groww/holdings", s.handleGrowwHoldingsAPI)
 
-	// Kite integration: status page, connect/disconnect, holdings API.
+	// Kite integration: connect/disconnect action routes. Same as Groww —
+	// the /kite page route is transitional, removed in PF-63.
 	mux.HandleFunc("GET /kite", s.handleKite)
 	mux.HandleFunc("GET /kite/connect", s.handleKiteConnect)
 	mux.HandleFunc("GET /kite/disconnect", s.handleKiteDisconnect)
 	mux.HandleFunc("GET /api/kite/holdings", s.handleKiteHoldingsAPI)
+
+	// Portfolio: consolidated view of all broker holdings (PF-60). Replaces
+	// the separate /groww and /kite pages.
+	mux.HandleFunc("GET /portfolio", s.handlePortfolio)
 
 	// Static assets: CSS, JS. fs.Sub scopes the embed to /static.
 	staticFS, err := fs.Sub(contentFS, "static")
@@ -1394,7 +1401,7 @@ func userFacingBrokerError(brokerName string, err error) string {
 // to Groww's authorize page. The transient localhost:52155 listener handles
 // the callback and redirects back to /groww.
 func (s *Server) handleGrowwConnect(w http.ResponseWriter, r *http.Request) {
-	returnURL := "http://" + r.Host + "/groww"
+	returnURL := "http://" + r.Host + "/portfolio"
 	authURL, err := s.groww.StartAuth(returnURL)
 	if err != nil {
 		s.renderError(w, http.StatusInternalServerError, "Could not start Groww auth: "+err.Error())
@@ -1409,7 +1416,7 @@ func (s *Server) handleGrowwDisconnect(w http.ResponseWriter, r *http.Request) {
 		s.renderError(w, http.StatusInternalServerError, "Could not disconnect: "+err.Error())
 		return
 	}
-	http.Redirect(w, r, "/groww?toast=Disconnected&variant=info", http.StatusSeeOther)
+	http.Redirect(w, r, "/portfolio?toast=Disconnected&variant=info", http.StatusSeeOther)
 }
 
 // handleGrowwHoldingsAPI returns holdings as JSON for the Refresh button's
@@ -1544,7 +1551,7 @@ func (s *Server) handleKiteDisconnect(w http.ResponseWriter, r *http.Request) {
 		s.renderError(w, http.StatusInternalServerError, "Could not disconnect: "+err.Error())
 		return
 	}
-	http.Redirect(w, r, "/kite?toast=Disconnected&variant=info", http.StatusSeeOther)
+	http.Redirect(w, r, "/portfolio?toast=Disconnected&variant=info", http.StatusSeeOther)
 }
 
 func userFacingKiteError(err error) string {
