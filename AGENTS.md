@@ -30,7 +30,7 @@ make goose-install   # install goose CLI binary (for migrate-create only)
 go build -o ~/go/bin/cresto .   # install binary to PATH
 ```
 
-Data lives at `~/.cresto/` (income.db + payslips/).
+Data lives at `~/.cresto/` (income.db + payslips/ + groww_token.json + kite_session.json).
 PID file at `~/.config/cresto/server.pid`, daemon logs at `~/.cresto/server.log`.
 
 ## Server commands
@@ -50,13 +50,19 @@ internal/
   pdfstore/        # PDF file storage
   render/          # PDF → PNG conversion
   tailwind/        # Tailwind CLI download + build
+  mcp/             # Shared MCP protocol client (JSON-RPC, SSE)
+  groww/           # Groww broker adapter (OAuth + holdings)
+  kite/            # Kite/Zerodha broker adapter (session auth + holdings/MF/trades)
 ```
 
 ## Template gotchas
 
 - Templates live in `internal/web/templates/` and are embedded with `//go:embed`
 - Custom template funcs registered in `server.go:tmplFuncs`:
-  `money`, `monthName`, `monthShort`, `periodLabel`, `json`, `urlquery`, `abs`, `inc`, `dec`, `sparklineSVG`, `yoySlopegraphSVG`
+  `money`, `money2`, `monthName`, `monthShort`, `periodLabel`, `json`, `urlquery`, `abs`, `neg`, `sign`, `inc`, `dec`, `sparklineSVG`, `yoySlopegraphSVG`
+- `money` drops trailing `.00`; `money2` always shows 2 decimals (used by broker tables)
+- `neg` returns bool (for P&L coloring); `sign` returns "+" or "" (for P&L prefix)
+- Go templates can't compare float64 with int literals — use `neg`/`sign` funcs instead of `lt .X 0` / `ge .X 0`
 - Every page template receives a `pageData` struct (Title, PendingCount, Active, Breadcrumbs)
 - Static files in `internal/web/static/` are also embedded — need `go build` to pick up changes
 
@@ -99,3 +105,34 @@ internal/
 - Don't add new template funcs without registering them in `tmplFuncs` (server.go)
 - Don't add Font Awesome — Basecoat uses inline Lucide SVGs for icons
 - Don't edit `schema.sql` — it's gone. Schema changes go in `internal/store/migrations/` as numbered SQL files with `-- +goose Up` / `-- +goose Down` markers. Run `make migrate-create name=<desc>` to add one.
+- Don't compare float64 with int literals in templates — use `neg`/`sign` funcs
+- Don't introduce a `Broker` interface at the web layer — Groww and Kite have different capabilities (Kite has MF holdings). They're separate concrete dependencies.
+
+## Broker MCP integrations
+
+Cresto connects to Groww and Zerodha (Kite) via their free MCP servers for live holdings data.
+
+### Architecture
+
+- `internal/mcp/` — shared MCP protocol client (JSON-RPC 2.0 over Streamable HTTP + SSE). 3 methods: `Initialize`, `ListTools`, `CallTool`. Stateless — caller provides auth headers per call.
+- `internal/groww/` — Groww adapter. OAuth 2.1 + PKCE + DCR. Groww's DCR returns a shared client with a fixed `localhost:52155` redirect URI. Transient HTTP listener on that port during auth. Token expires daily (~24h), no refresh. Token at `~/.cresto/groww_token.json`.
+- `internal/kite/` — Kite adapter. Session-based auth (initialize → login tool → authorize URL → user authenticates at Zerodha). No OAuth, no callback listener. Session at `~/.cresto/kite_session.json`. `callRaw` internal seam shared by Holdings, MFHoldings, Trades.
+
+### Web UI
+
+- `/groww` — connect/disconnect, equity holdings table with AJAX refresh, disconnect confirmation dialog
+- `/kite` — connect/disconnect, equity + MF holdings tables, trades table, AJAX refresh
+- Both use `prepareXView` pattern: one method computes the view model, both HTML and JSON handlers serialize it
+
+### CLI commands (for agents)
+
+- `cresto holdings` — live holdings from all connected brokers, `--broker groww|kite`, `--json`. No server/DB required.
+- `cresto quote SYMBOL [SYMBOL...]` — LTP + OHLC lookup, `--exchange NSE|BSE` (default NSE), `--broker`, `--json`. Auto-selects Kite (exact match, richer data) over Groww (fuzzy search).
+
+### Limitations
+
+- **No historical trades**: Kite MCP's `get_trades` returns today only. Kite Connect API also lacks historical trades. Tax filing requires manual Console export.
+- **No MF on Groww**: Groww MCP's `get_mutualfund_details` is a stub.
+- **Groww token expires daily**: reconnect via web UI (`/groww` → Connect).
+- **Kite session can become invalid**: reconnect via web UI (`/kite` → Connect).
+- Broker connections happen through the web UI, not CLI. The CLI reads the saved token/session files.
