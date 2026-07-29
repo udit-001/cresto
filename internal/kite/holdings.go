@@ -10,18 +10,19 @@ import (
 // Field names follow Kite's API conventions; the parser handles
 // variations in the response shape.
 type Holding struct {
-	TradingSymbol string  `json:"tradingsymbol"`
-	Quantity      float64 `json:"quantity"`
-	AveragePrice  float64 `json:"average_price"`
-	LastPrice     float64 `json:"last_price"`
-	PnL           float64 `json:"pnl"`
-	DayChange     float64 `json:"day_change"`
-	DayChangePct  float64 `json:"day_change_percentage"`
-	Product       string  `json:"product"`
-	Exchange      string  `json:"exchange"`
-	ISIN          string  `json:"isin"`
-	InvestedValue float64 `json:"invested_value"`
-	CurrentValue  float64 `json:"current_value"`
+	TradingSymbol   string  `json:"tradingsymbol"`
+	Quantity        float64 `json:"quantity"`
+	AveragePrice    float64 `json:"average_price"`
+	LastPrice       float64 `json:"last_price"`
+	PnL             float64 `json:"pnl"`
+	DayChange       float64 `json:"day_change"`
+	DayChangePct    float64 `json:"day_change_percentage"`
+	Product         string  `json:"product"`
+	Exchange        string  `json:"exchange"`
+	ISIN            string  `json:"isin"`
+	InstrumentToken int     `json:"instrument_token"`
+	InvestedValue   float64 `json:"invested_value"`
+	CurrentValue    float64 `json:"current_value"`
 }
 
 // DisplayName returns the trading symbol.

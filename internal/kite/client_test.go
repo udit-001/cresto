@@ -112,6 +112,17 @@ func TestParseHoldings_Array(t *testing.T) {
 	}
 }
 
+func TestParseHoldings_InstrumentToken(t *testing.T) {
+	raw := `[{"tradingsymbol":"RELIANCE","quantity":10,"instrument_token":738561}]`
+	result := parseHoldings(raw)
+	if len(result.Holdings) != 1 {
+		t.Fatalf("got %d holdings, want 1", len(result.Holdings))
+	}
+	if result.Holdings[0].InstrumentToken != 738561 {
+		t.Errorf("instrument_token = %d, want 738561", result.Holdings[0].InstrumentToken)
+	}
+}
+
 func TestParseMFHoldings_Empty(t *testing.T) {
 	result := parseMFHoldings("")
 	if len(result.Holdings) != 0 {
