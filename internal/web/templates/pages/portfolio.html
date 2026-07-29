@@ -46,7 +46,7 @@
   <section class="empty">
     <header>
       <figure>
-        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
       </figure>
       <h3>Connect your broker accounts</h3>
       <p>View all your stock holdings in one place. Cresto stores only the access token or session ID — your credentials stay with your broker.</p>
@@ -58,14 +58,98 @@
   </section>
 
   {{else}}
-  <!-- At least one broker connected: holdings table arrives in PF-61.
-       For now, a placeholder so the page shell is verifiable. -->
-  <div class="rounded-lg border bg-card p-8 text-center text-muted-foreground" id="portfolio-placeholder">
-    Holdings table coming soon.
+  <!-- Holdings section -->
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h2 class="text-xl font-semibold">Holdings</h2>
+      <p class="text-sm text-muted-foreground mt-1" id="portfolio-fetched-at">{{if .FetchedAt}}Fetched at {{.FetchedAt}}{{end}}</p>
+    </div>
+    <button type="button" id="portfolio-refresh" class="btn" data-variant="outline" data-size="sm">
+      <svg class="refresh-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+      <span class="refresh-label">Refresh</span>
+    </button>
   </div>
-  {{end}}
 
-  <!-- Disconnect confirmation dialogs (Basecoat alert-dialog pattern) -->
+  <!-- Per-broker error alerts -->
+  <div id="broker-errors" class="space-y-3">
+    {{if .GrowwError}}
+    <div class="alert" data-variant="destructive" id="groww-error-alert">
+      <section><strong>Groww:</strong> {{.GrowwError}}</section>
+    </div>
+    {{end}}
+    {{if .KiteError}}
+    <div class="alert" data-variant="destructive" id="kite-error-alert">
+      <section><strong>Kite:</strong> {{.KiteError}}</section>
+    </div>
+    {{end}}
+  </div>
+
+  <!-- Filter chips -->
+  <nav class="flex flex-wrap items-center gap-2" id="filter-chips">
+    <button type="button" class="filter-chip rounded-full px-2.5 py-0.5 text-xs transition-colors bg-muted text-foreground" data-filter="all">
+      All <span class="ml-1 opacity-70 count-all"></span>
+    </button>
+    <button type="button" class="filter-chip rounded-full px-2.5 py-0.5 text-xs transition-colors text-muted-foreground hover:bg-muted hover:text-foreground {{if not .Groww.Connected}}opacity-40 cursor-not-allowed{{end}}" data-filter="groww" {{if not .Groww.Connected}}disabled{{end}}>
+      Groww <span class="ml-1 opacity-70 count-groww"></span>
+    </button>
+    <button type="button" class="filter-chip rounded-full px-2.5 py-0.5 text-xs transition-colors text-muted-foreground hover:bg-muted hover:text-foreground {{if not .Kite.Connected}}opacity-40 cursor-not-allowed{{end}}" data-filter="kite" {{if not .Kite.Connected}}disabled{{end}}>
+      Kite <span class="ml-1 opacity-70 count-kite"></span>
+    </button>
+  </nav>
+
+  <!-- Holdings table -->
+  <div id="portfolio-table-wrap">
+    {{if gt (len .Holdings) 0}}
+    <div class="rounded-lg border overflow-hidden">
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Broker</th>
+            <th class="text-right">Qty</th>
+            <th class="text-right">Avg Price</th>
+            <th class="text-right">LTP</th>
+            <th class="text-right">P&L</th>
+            <th class="text-right">P&L %</th>
+          </tr>
+        </thead>
+        <tbody id="portfolio-holdings-body">
+          {{range .Holdings}}
+          <tr data-broker="{{.Broker}}" data-value="{{printf "%.2f" (mul .LTP .Quantity)}}" data-pnl="{{printf "%.2f" .PnL}}" data-invested="{{printf "%.2f" (mul .AvgPrice .Quantity)}}">
+            <td>
+              <div class="font-medium">{{if .Title}}{{.Title}}{{else}}{{.Symbol}}{{end}}</div>
+              {{if .Title}}<div class="text-xs text-muted-foreground">{{.Symbol}}</div>{{end}}
+            </td>
+            <td>
+              <span class="badge text-xs {{if eq .Broker "groww"}}bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300{{else}}bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300{{end}}">{{.Broker}}</span>
+            </td>
+            <td class="text-right tabular-nums">{{.Quantity}}</td>
+            <td class="text-right tabular-nums money">{{money2 .AvgPrice}}</td>
+            <td class="text-right tabular-nums money">{{money2 .LTP}}</td>
+            <td class="text-right tabular-nums {{if neg .PnL}}text-destructive{{else}}text-success{{end}} money">{{sign .PnL}}{{money2 .PnL}}</td>
+            <td class="text-right tabular-nums {{if neg .PnLPercent}}text-destructive{{else}}text-success{{end}}">{{sign .PnLPercent}}{{printf "%.2f" .PnLPercent}}%</td>
+          </tr>
+          {{end}}
+        </tbody>
+        <tfoot>
+          <tr class="border-t-2 font-semibold" id="portfolio-total-row">
+            <td>Total</td>
+            <td colspan="3"></td>
+            <td class="text-right tabular-nums money" id="portfolio-total-value">{{money2 .Totals.TotalValue}}</td>
+            <td class="text-right tabular-nums {{if neg .Totals.TotalPnL}}text-destructive{{else}}text-success{{end}} money" id="portfolio-total-pnl">{{sign .Totals.TotalPnL}}{{money2 .Totals.TotalPnL}}</td>
+            <td class="text-right tabular-nums {{if neg .Totals.PnLPercent}}text-destructive{{else}}text-success{{end}}" id="portfolio-total-pnl-pct">{{sign .Totals.PnLPercent}}{{printf "%.2f" .Totals.PnLPercent}}%</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    {{else}}
+    <div class="rounded-lg border bg-card p-8 text-center text-muted-foreground" id="portfolio-empty">
+      No holdings found.
+    </div>
+    {{end}}
+  </div>
+
+  <!-- Disconnect confirmation dialogs -->
   <dialog class="alert-dialog" id="groww-disconnect-dialog" aria-labelledby="groww-disconnect-title" aria-describedby="groww-disconnect-desc">
     <div>
       <header>
@@ -91,5 +175,227 @@
       </footer>
     </div>
   </dialog>
+
+  <script>
+  (() => {
+    const refreshBtn = document.getElementById('portfolio-refresh');
+    const refreshIcon = refreshBtn ? refreshBtn.querySelector('.refresh-icon') : null;
+    const refreshLabel = refreshBtn ? refreshBtn.querySelector('.refresh-label') : null;
+    const fetchedAtEl = document.getElementById('portfolio-fetched-at');
+    const toaster = document.getElementById('toaster');
+    let refreshing = false;
+
+    function showToast(category, title) {
+      if (toaster && typeof toaster.toast === 'function') toaster.toast({ category, title });
+    }
+
+    function fmt(n) {
+      return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
+    }
+    function sign(v) { return v < 0 ? '' : '+'; }
+    function pnlClass(v) { return v < 0 ? 'text-destructive' : 'text-success'; }
+
+    // --- Filter chips ---
+    let activeFilter = 'all';
+    const chips = document.querySelectorAll('.filter-chip');
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        if (chip.disabled) return;
+        activeFilter = chip.dataset.filter;
+        chips.forEach(c => {
+          if (c.disabled) return;
+          if (c.dataset.filter === activeFilter) {
+            c.className = 'filter-chip rounded-full px-2.5 py-0.5 text-xs transition-colors bg-muted text-foreground';
+          } else {
+            c.className = 'filter-chip rounded-full px-2.5 py-0.5 text-xs transition-colors text-muted-foreground hover:bg-muted hover:text-foreground';
+          }
+        });
+        applyFilter();
+      });
+    });
+
+    function applyFilter() {
+      const rows = document.querySelectorAll('#portfolio-holdings-body tr');
+      let visibleValue = 0, visiblePnL = 0, visibleInvested = 0;
+      rows.forEach(row => {
+        const show = activeFilter === 'all' || row.dataset.broker === activeFilter;
+        row.style.display = show ? '' : 'none';
+        if (show) {
+          visibleValue += parseFloat(row.dataset.value) || 0;
+          visiblePnL += parseFloat(row.dataset.pnl) || 0;
+          visibleInvested += parseFloat(row.dataset.invested) || 0;
+        }
+      });
+      updateTotals(visibleValue, visibleInvested, visiblePnL);
+    }
+
+    function updateTotals(value, invested, pnl) {
+      const tv = document.getElementById('portfolio-total-value');
+      const tp = document.getElementById('portfolio-total-pnl');
+      const tpct = document.getElementById('portfolio-total-pnl-pct');
+      if (tv) tv.textContent = fmt(value);
+      if (tp) {
+        tp.textContent = sign(pnl) + fmt(pnl);
+        tp.className = 'text-right tabular-nums ' + pnlClass(pnl) + ' money';
+      }
+      if (tpct) {
+        const pct = invested > 0 ? (pnl / invested * 100) : 0;
+        tpct.textContent = sign(pct) + fmt(pct) + '%';
+        tpct.className = 'text-right tabular-nums ' + pnlClass(pct);
+      }
+    }
+
+    function updateCounts(holdings) {
+      const all = holdings.length;
+      const gw = holdings.filter(h => h.broker === 'groww').length;
+      const kt = holdings.filter(h => h.broker === 'kite').length;
+      const set = (cls, n) => {
+        const el = document.querySelector(cls);
+        if (el) el.textContent = '(' + n + ')';
+      };
+      set('.count-all', all);
+      set('.count-groww', gw);
+      set('.count-kite', kt);
+    }
+
+    // --- Render holdings from JSON ---
+    function renderHoldings(data) {
+      const body = document.getElementById('portfolio-holdings-body');
+      const wrap = document.getElementById('portfolio-table-wrap');
+      if (!wrap) return;
+
+      updateCounts(data.holdings || []);
+
+      if (!data.holdings || data.holdings.length === 0) {
+        wrap.innerHTML = '<div class="rounded-lg border bg-card p-8 text-center text-muted-foreground" id="portfolio-empty">No holdings found.</div>';
+        return;
+      }
+
+      const rows = data.holdings.map(h => {
+        const value = h.ltp * h.quantity;
+        const invested = h.avg_price * h.quantity;
+        const name = h.title || h.symbol;
+        const sub = h.title ? `<div class="text-xs text-muted-foreground">${h.symbol}</div>` : '';
+        const brokerBadge = h.broker === 'groww'
+          ? '<span class="badge text-xs bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">groww</span>'
+          : '<span class="badge text-xs bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300">kite</span>';
+        return `<tr data-broker="${h.broker}" data-value="${value.toFixed(2)}" data-pnl="${h.pnl.toFixed(2)}" data-invested="${invested.toFixed(2)}">
+          <td><div class="font-medium">${name}</div>${sub}</td>
+          <td>${brokerBadge}</td>
+          <td class="text-right tabular-nums">${h.quantity}</td>
+          <td class="text-right tabular-nums money">${fmt(h.avg_price)}</td>
+          <td class="text-right tabular-nums money">${fmt(h.ltp)}</td>
+          <td class="text-right tabular-nums ${pnlClass(h.pnl)} money">${sign(h.pnl)}${fmt(h.pnl)}</td>
+          <td class="text-right tabular-nums ${pnlClass(h.pnl_percent)}">${sign(h.pnl_percent)}${fmt(h.pnl_percent)}%</td>
+        </tr>`;
+      }).join('');
+
+      wrap.innerHTML = `<div class="rounded-lg border overflow-hidden">
+        <table class="table w-full">
+          <thead><tr>
+            <th>Symbol</th><th>Broker</th>
+            <th class="text-right">Qty</th><th class="text-right">Avg Price</th>
+            <th class="text-right">LTP</th><th class="text-right">P&L</th><th class="text-right">P&L %</th>
+          </tr></thead>
+          <tbody id="portfolio-holdings-body">${rows}</tbody>
+          <tfoot><tr class="border-t-2 font-semibold" id="portfolio-total-row">
+            <td>Total</td><td colspan="3"></td>
+            <td class="text-right tabular-nums money" id="portfolio-total-value"></td>
+            <td class="text-right tabular-nums money" id="portfolio-total-pnl"></td>
+            <td class="text-right tabular-nums" id="portfolio-total-pnl-pct"></td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+
+      applyFilter();
+    }
+
+    // --- Update broker status strip ---
+    function updateBrokerStrip(data) {
+      const gwPill = document.getElementById('groww-status-pill');
+      const ktPill = document.getElementById('kite-status-pill');
+
+      if (gwPill) {
+        const wasConnected = gwPill.dataset.state === 'connected';
+        if (!data.groww_connected) {
+          if (wasConnected) showToast('warning', 'Groww session expired');
+          gwPill.dataset.state = data.groww_expired ? 'expired' : 'disconnected';
+          gwPill.innerHTML = data.groww_expired
+            ? '<svg class="text-warning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg><span class="font-medium">Groww</span><span class="text-warning">Session expired</span><a href="/groww/connect" class="text-primary underline-offset-2 hover:underline text-xs">Reconnect</a>'
+            : '<svg class="text-muted-foreground" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg><span class="font-medium">Groww</span><span class="text-muted-foreground">Not connected</span><a href="/groww/connect" class="text-primary underline-offset-2 hover:underline text-xs">Connect</a>';
+          const gwChip = document.querySelector('[data-filter="groww"]');
+          if (gwChip) { gwChip.disabled = true; gwChip.classList.add('opacity-40', 'cursor-not-allowed'); }
+        }
+      }
+
+      if (ktPill) {
+        const wasConnected = ktPill.dataset.state === 'connected';
+        if (!data.kite_connected) {
+          if (wasConnected) showToast('warning', 'Kite session expired');
+          ktPill.dataset.state = 'disconnected';
+          ktPill.innerHTML = '<svg class="text-muted-foreground" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg><span class="font-medium">Kite</span><span class="text-muted-foreground">Not connected</span><a href="/kite/connect" class="text-primary underline-offset-2 hover:underline text-xs">Connect</a>';
+          const ktChip = document.querySelector('[data-filter="kite"]');
+          if (ktChip) { ktChip.disabled = true; ktChip.classList.add('opacity-40', 'cursor-not-allowed'); }
+          if (activeFilter === 'kite') {
+            document.querySelector('[data-filter="all"]').click();
+          }
+        }
+      }
+    }
+
+    // --- Refresh button ---
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', async () => {
+        if (refreshing) return;
+        refreshing = true;
+        refreshBtn.disabled = true;
+        if (refreshIcon) refreshIcon.classList.add('animate-spin');
+        if (refreshLabel) refreshLabel.textContent = 'Refreshing…';
+
+        try {
+          const res = await fetch('/api/portfolio/holdings', { cache: 'no-store' });
+          if (!res.ok) throw new Error('Server returned ' + res.status);
+          const data = await res.json();
+
+          updateBrokerStrip(data);
+          renderHoldings(data);
+
+          // Update error alerts
+          const errWrap = document.getElementById('broker-errors');
+          if (errWrap) {
+            let html = '';
+            if (data.groww_error) html += `<div class="alert" data-variant="destructive"><section><strong>Groww:</strong> ${data.groww_error}</section></div>`;
+            if (data.kite_error) html += `<div class="alert" data-variant="destructive"><section><strong>Kite:</strong> ${data.kite_error}</section></div>`;
+            errWrap.innerHTML = html;
+          }
+
+          if (fetchedAtEl && data.fetched_at) fetchedAtEl.textContent = 'Fetched at ' + data.fetched_at;
+
+          const hadErrors = data.groww_error || data.kite_error;
+          showToast(hadErrors ? 'warning' : 'success', hadErrors ? 'Refreshed with errors' : 'Holdings refreshed');
+        } catch (e) {
+          showToast('error', 'Could not reach server');
+        } finally {
+          refreshing = false;
+          refreshBtn.disabled = false;
+          if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+          if (refreshLabel) refreshLabel.textContent = 'Refresh';
+        }
+      });
+    }
+
+    // Initialize counts and filter on load
+    updateCounts([{{range .Holdings}}{broker:"{{.Broker}}"},{{end}}]);
+    applyFilter();
+  })();
+  </script>
+
+  <style>
+    @media (prefers-reduced-motion: no-preference) {
+      .animate-spin { animation: spin 0.8s linear infinite; }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+  {{end}}
 </div>
 {{end}}

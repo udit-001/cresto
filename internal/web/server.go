@@ -44,6 +44,7 @@ var tmplFuncs = template.FuncMap{
 	"abs":              abs,
 	"neg":              neg,
 	"sign":             sign,
+	"mul":              mulFloat,
 	"inc":              incInt,
 	"dec":              decInt,
 	"sparklineSVG":     sparklineSVG,
@@ -56,6 +57,11 @@ var tmplFuncs = template.FuncMap{
 // prev/next FY nav so the template can stay arithmetic-free.
 func incInt(n int) int { return n + 1 }
 func decInt(n int) int { return n - 1 }
+
+// mulFloat multiplies two float64s. Used by the portfolio table to compute
+// per-row value (LTP × qty) and invested (avgPrice × qty) for the data
+// attributes that drive client-side totals recomputation on filter.
+func mulFloat(a, b float64) float64 { return a * b }
 
 // reversePoints returns a copy of the slice in reverse order. Used by the
 // component detail page: the chart wants chronological (oldest first),
@@ -491,6 +497,7 @@ func (s *Server) Routes() *http.ServeMux {
 	// Portfolio: consolidated view of all broker holdings (PF-60). Replaces
 	// the separate /groww and /kite pages.
 	mux.HandleFunc("GET /portfolio", s.handlePortfolio)
+	mux.HandleFunc("GET /api/portfolio/holdings", s.handlePortfolioHoldingsAPI)
 
 	// Static assets: CSS, JS. fs.Sub scopes the embed to /static.
 	staticFS, err := fs.Sub(contentFS, "static")

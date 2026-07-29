@@ -99,3 +99,13 @@ func aggregatePortfolio(holdings []portfolioHolding) portfolioTotals {
 	}
 	return t
 }
+
+// PnLPercent computes the overall portfolio return percentage from the
+// aggregated totals. Returns 0 when there's no cost basis to avoid division
+// by zero. Used by the total row in the portfolio table.
+func (t portfolioTotals) PnLPercent() float64 {
+	if t.TotalInvested == 0 {
+		return 0
+	}
+	return t.TotalPnL / t.TotalInvested * 100
+}
