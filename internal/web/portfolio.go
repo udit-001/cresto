@@ -32,9 +32,11 @@ type portfolioView struct {
 	AnyConnected bool   // true if at least one broker is connected (template convenience)
 	Holdings     []portfolioHolding
 	Totals       portfolioTotals
-	GrowwError   string // user-facing error if Groww fetch failed
-	KiteError    string // user-facing error if Kite fetch failed
-	FetchedAt    string // formatted timestamp of the latest successful fetch
+	MFHoldings   []kite.MFHolding // Kite-only; nil when Kite disconnected or no MF
+	Trades       []kite.Trade     // Kite-only; nil when Kite disconnected or no trades
+	GrowwError   string           // user-facing error if Groww fetch failed
+	KiteError    string           // user-facing error if Kite fetch failed
+	FetchedAt    string           // formatted timestamp of the latest successful fetch
 }
 
 // preparePortfolioView reads each broker's connection state and, for connected
@@ -77,7 +79,9 @@ func (s *Server) preparePortfolioView(ctx context.Context) portfolioView {
 		}
 	}
 
-	// Fetch Kite holdings if connected.
+	// Fetch Kite holdings, MF, and trades if connected. Each fetch is
+	// independent — MF/trades failures hide their own section without
+	// blocking the others (fixes the prepareKiteView cascade bug).
 	if v.Kite.Connected {
 		result, err := s.kite.Holdings(ctx)
 		if err != nil {
@@ -92,6 +96,32 @@ func (s *Server) preparePortfolioView(ctx context.Context) portfolioView {
 			}
 			if result.FetchedAt.After(latestFetch) {
 				latestFetch = result.FetchedAt
+			}
+		}
+
+		// MF holdings — non-fatal. On error the section is hidden (nil).
+		// ErrNotConnected means the session lapsed mid-fetch; mark
+		// disconnected so the status strip updates.
+		if v.Kite.Connected {
+			if mfResult, err := s.kite.MFHoldings(ctx); err == nil {
+				v.MFHoldings = mfResult.Holdings
+				if mfResult.FetchedAt.After(latestFetch) {
+					latestFetch = mfResult.FetchedAt
+				}
+			} else if errors.Is(err, kite.ErrNotConnected) {
+				v.Kite.Connected = false
+			}
+		}
+
+		// Trades — non-fatal. Same handling as MF.
+		if v.Kite.Connected {
+			if trResult, err := s.kite.Trades(ctx); err == nil {
+				v.Trades = trResult.Trades
+				if trResult.FetchedAt.After(latestFetch) {
+					latestFetch = trResult.FetchedAt
+				}
+			} else if errors.Is(err, kite.ErrNotConnected) {
+				v.Kite.Connected = false
 			}
 		}
 	}
@@ -143,9 +173,29 @@ type portfolioHoldingsResponse struct {
 	TotalInvested  float64                `json:"total_invested"`
 	TotalPnL       float64                `json:"total_pnl"`
 	TotalPnLPct    float64                `json:"total_pnl_pct"`
+	MFHoldings     []portfolioMFJSON      `json:"mf_holdings"`
+	Trades         []portfolioTradeJSON   `json:"trades"`
 	FetchedAt      string                 `json:"fetched_at"`
 	GrowwError     string                 `json:"groww_error,omitempty"`
 	KiteError      string                 `json:"kite_error,omitempty"`
+}
+
+type portfolioMFJSON struct {
+	SchemeName string  `json:"scheme_name"`
+	Folio      string  `json:"folio"`
+	Quantity   float64 `json:"quantity"`
+	AvgPrice   float64 `json:"avg_price"`
+	LastPrice  float64 `json:"last_price"`
+	PnL        float64 `json:"pnl"`
+}
+
+type portfolioTradeJSON struct {
+	Symbol          string  `json:"symbol"`
+	TransactionType string  `json:"transaction_type"`
+	Quantity        float64 `json:"quantity"`
+	Price           float64 `json:"price"`
+	TradeValue      float64 `json:"trade_value"`
+	FillTimestamp   string  `json:"fill_timestamp"`
 }
 
 // handlePortfolioHoldingsAPI returns unified holdings as JSON for the Refresh
@@ -180,8 +230,49 @@ func (s *Server) handlePortfolioHoldingsAPI(w http.ResponseWriter, r *http.Reque
 		TotalInvested:  v.Totals.TotalInvested,
 		TotalPnL:       v.Totals.TotalPnL,
 		TotalPnLPct:    v.Totals.PnLPercent(),
+		MFHoldings:     mapMFHoldings(v.MFHoldings),
+		Trades:         mapTrades(v.Trades),
 		FetchedAt:      v.FetchedAt,
 		GrowwError:     v.GrowwError,
 		KiteError:      v.KiteError,
 	})
+}
+
+// mapMFHoldings converts Kite MF holdings to the JSON-serializable form.
+// MF holdings are Kite-only — no cross-broker mapping needed.
+func mapMFHoldings(mf []kite.MFHolding) []portfolioMFJSON {
+	if len(mf) == 0 {
+		return nil
+	}
+	out := make([]portfolioMFJSON, len(mf))
+	for i, m := range mf {
+		out[i] = portfolioMFJSON{
+			SchemeName: m.SchemeName,
+			Folio:      m.Folio,
+			Quantity:   m.Quantity,
+			AvgPrice:   m.AveragePrice,
+			LastPrice:  m.LastPrice,
+			PnL:        m.PnL,
+		}
+	}
+	return out
+}
+
+// mapTrades converts Kite trades to the JSON-serializable form.
+func mapTrades(trades []kite.Trade) []portfolioTradeJSON {
+	if len(trades) == 0 {
+		return nil
+	}
+	out := make([]portfolioTradeJSON, len(trades))
+	for i, t := range trades {
+		out[i] = portfolioTradeJSON{
+			Symbol:          t.TradingSymbol,
+			TransactionType: t.TransactionType,
+			Quantity:        t.Quantity,
+			Price:           t.Price,
+			TradeValue:      t.TradeValue,
+			FillTimestamp:   t.FillTimestamp,
+		}
+	}
+	return out
 }

@@ -149,6 +149,78 @@
     {{end}}
   </div>
 
+  <!-- Mutual Funds section (Kite-only, shown when Kite connected + has MF) -->
+  <div id="portfolio-mf-wrap">
+  {{if gt (len .MFHoldings) 0}}
+  <div id="portfolio-mf-section">
+    <h3 class="text-lg font-semibold pt-2">Mutual Funds</h3>
+    <div class="rounded-lg border overflow-hidden mt-2">
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th>Scheme</th>
+            <th class="text-right">Folio</th>
+            <th class="text-right">Qty</th>
+            <th class="text-right">Avg</th>
+            <th class="text-right">NAV</th>
+            <th class="text-right">P&L</th>
+          </tr>
+        </thead>
+        <tbody id="portfolio-mf-body">
+          {{range .MFHoldings}}
+          <tr>
+            <td class="font-medium">{{.SchemeName}}</td>
+            <td class="text-right tabular-nums text-muted-foreground">{{.Folio}}</td>
+            <td class="text-right tabular-nums">{{.Quantity}}</td>
+            <td class="text-right tabular-nums money">{{money2 .AveragePrice}}</td>
+            <td class="text-right tabular-nums money">{{money2 .LastPrice}}</td>
+            <td class="text-right tabular-nums {{if neg .PnL}}text-destructive{{else}}text-success{{end}} money">{{sign .PnL}}{{money2 .PnL}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{end}}
+  </div>
+
+  <!-- Trades section (Kite-only, shown when Kite connected + has trades) -->
+  <div id="portfolio-trades-wrap">
+  {{if gt (len .Trades) 0}}
+  <div id="portfolio-trades-section">
+    <h3 class="text-lg font-semibold pt-2">Trades</h3>
+    <div class="rounded-lg border overflow-hidden mt-2">
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Type</th>
+            <th class="text-right">Qty</th>
+            <th class="text-right">Price</th>
+            <th class="text-right">Value</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="portfolio-trades-body">
+          {{range .Trades}}
+          <tr>
+            <td class="font-medium">{{.TradingSymbol}}</td>
+            <td>
+              <span class="badge {{if eq .TransactionType "BUY"}}bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300{{else}}bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300{{end}}">{{.TransactionType}}</span>
+            </td>
+            <td class="text-right tabular-nums">{{.Quantity}}</td>
+            <td class="text-right tabular-nums money">{{money2 .Price}}</td>
+            <td class="text-right tabular-nums money">{{money2 .TradeValue}}</td>
+            <td class="text-muted-foreground text-sm">{{.FillTimestamp}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{end}}
+  </div>
+
   <!-- Disconnect confirmation dialogs -->
   <dialog class="alert-dialog" id="groww-disconnect-dialog" aria-labelledby="groww-disconnect-title" aria-describedby="groww-disconnect-desc">
     <div>
@@ -310,6 +382,75 @@
       applyFilter();
     }
 
+    // --- Render MF holdings from JSON ---
+    function renderMFHoldings(data) {
+      const wrap = document.getElementById('portfolio-mf-wrap');
+      if (!wrap) return;
+      if (!data.mf_holdings || data.mf_holdings.length === 0) {
+        wrap.innerHTML = '';
+        return;
+      }
+      const rows = data.mf_holdings.map(m => `
+        <tr>
+          <td class="font-medium">${m.scheme_name}</td>
+          <td class="text-right tabular-nums text-muted-foreground">${m.folio}</td>
+          <td class="text-right tabular-nums">${m.quantity}</td>
+          <td class="text-right tabular-nums money">${fmt(m.avg_price)}</td>
+          <td class="text-right tabular-nums money">${fmt(m.last_price)}</td>
+          <td class="text-right tabular-nums ${pnlClass(m.pnl)} money">${sign(m.pnl)}${fmt(m.pnl)}</td>
+        </tr>
+      `).join('');
+      wrap.innerHTML = `<div id="portfolio-mf-section">
+        <h3 class="text-lg font-semibold pt-2">Mutual Funds</h3>
+        <div class="rounded-lg border overflow-hidden mt-2">
+          <table class="table w-full">
+            <thead><tr>
+              <th>Scheme</th><th class="text-right">Folio</th>
+              <th class="text-right">Qty</th><th class="text-right">Avg</th>
+              <th class="text-right">NAV</th><th class="text-right">P&L</th>
+            </tr></thead>
+            <tbody id="portfolio-mf-body">${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+
+    // --- Render trades from JSON ---
+    function renderTrades(data) {
+      const wrap = document.getElementById('portfolio-trades-wrap');
+      if (!wrap) return;
+      if (!data.trades || data.trades.length === 0) {
+        wrap.innerHTML = '';
+        return;
+      }
+      const rows = data.trades.map(t => {
+        const badgeClass = t.transaction_type === 'BUY'
+          ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300'
+          : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300';
+        return `<tr>
+          <td class="font-medium">${t.symbol}</td>
+          <td><span class="badge ${badgeClass}">${t.transaction_type}</span></td>
+          <td class="text-right tabular-nums">${t.quantity}</td>
+          <td class="text-right tabular-nums money">${fmt(t.price)}</td>
+          <td class="text-right tabular-nums money">${fmt(t.trade_value)}</td>
+          <td class="text-muted-foreground text-sm">${t.fill_timestamp}</td>
+        </tr>`;
+      }).join('');
+      wrap.innerHTML = `<div id="portfolio-trades-section">
+        <h3 class="text-lg font-semibold pt-2">Trades</h3>
+        <div class="rounded-lg border overflow-hidden mt-2">
+          <table class="table w-full">
+            <thead><tr>
+              <th>Symbol</th><th>Type</th>
+              <th class="text-right">Qty</th><th class="text-right">Price</th>
+              <th class="text-right">Value</th><th>Time</th>
+            </tr></thead>
+            <tbody id="portfolio-trades-body">${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+
     // --- Update broker status strip ---
     function updateBrokerStrip(data) {
       const gwPill = document.getElementById('groww-status-pill');
@@ -359,6 +500,8 @@
 
           updateBrokerStrip(data);
           renderHoldings(data);
+          renderMFHoldings(data);
+          renderTrades(data);
 
           // Update error alerts
           const errWrap = document.getElementById('broker-errors');
