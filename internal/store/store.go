@@ -777,6 +777,40 @@ func (s *Store) DeletePayslipsByStatus(ctx context.Context, status Status) ([]Pa
 	return deleted, nil
 }
 
+// DeletePayslipsByEmployer hard-deletes every payslip with the given employer
+// name. Components are removed by the schema's ON DELETE CASCADE constraint.
+// Returns the deleted payslips (with RawPDFPath populated) so the caller
+// can clean up PDF files on disk — the store owns data only, not files.
+// Empty employer is rejected (won't delete everything by accident).
+func (s *Store) DeletePayslipsByEmployer(ctx context.Context, employer string) ([]Payslip, error) {
+	if employer == "" {
+		return nil, errors.New("store: DeletePayslipsByEmployer requires non-empty employer")
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, raw_pdf_path FROM payslips WHERE employer_name = ?`, employer)
+	if err != nil {
+		return nil, err
+	}
+	var deleted []Payslip
+	for rows.Next() {
+		var p Payslip
+		if err := rows.Scan(&p.ID, &p.RawPDFPath); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		deleted = append(deleted, p)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM payslips WHERE employer_name = ?`, employer); err != nil {
+		return nil, err
+	}
+	return deleted, nil
+}
+
 // ListPendingReviewChronological returns pending payslips oldest-period-first
 // so the review queue walks the user through time rather than by insert order.
 // Payslips with an unparsed period (month/year = 0) sort last by period but
