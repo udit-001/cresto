@@ -15,10 +15,13 @@ type Config struct {
 	DataDir         string `toml:"data_dir"`
 	Port            int    `toml:"port"`
 
-	// SQLitePath and PDFStoragePath are derived from DataDir and set
-	// during Load / Default. They are not TOML fields.
-	SQLitePath     string `toml:"-"`
-	PDFStoragePath string `toml:"-"`
+	// SQLitePath, PDFStoragePath, GrowwTokenPath, and KiteSessionPath
+	// are derived from DataDir and set during Load / Default.
+	// They are not TOML fields.
+	SQLitePath      string `toml:"-"`
+	PDFStoragePath  string `toml:"-"`
+	GrowwTokenPath  string `toml:"-"`
+	KiteSessionPath string `toml:"-"`
 }
 
 const DefaultPort = 7777
@@ -73,6 +76,22 @@ func PDFsPath(cfg *Config) string {
 	return filepath.Join(dir, "payslips")
 }
 
+func GrowwTokenPath(cfg *Config) string {
+	dir := DefaultDataDir()
+	if cfg != nil && cfg.DataDir != "" {
+		dir = cfg.DataDir
+	}
+	return filepath.Join(dir, "groww_token.json")
+}
+
+func KiteSessionPath(cfg *Config) string {
+	dir := DefaultDataDir()
+	if cfg != nil && cfg.DataDir != "" {
+		dir = cfg.DataDir
+	}
+	return filepath.Join(dir, "kite_session.json")
+}
+
 func Default() Config {
 	dataDir := DefaultDataDir()
 	return Config{
@@ -81,6 +100,8 @@ func Default() Config {
 		DataDir:         dataDir,
 		SQLitePath:      filepath.Join(dataDir, "income.db"),
 		PDFStoragePath:  filepath.Join(dataDir, "payslips"),
+		GrowwTokenPath:  filepath.Join(dataDir, "groww_token.json"),
+		KiteSessionPath: filepath.Join(dataDir, "kite_session.json"),
 		Port:            DefaultPort,
 	}
 }
@@ -113,6 +134,8 @@ func Load() (*Config, error) {
 	}
 	cfg.SQLitePath = DBPath(&cfg)
 	cfg.PDFStoragePath = PDFsPath(&cfg)
+	cfg.GrowwTokenPath = GrowwTokenPath(&cfg)
+	cfg.KiteSessionPath = KiteSessionPath(&cfg)
 	return &cfg, nil
 }
 

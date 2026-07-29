@@ -83,6 +83,7 @@ func isSkippedCommand(cmd *cobra.Command) bool {
 	leafSkipped := map[string]bool{
 		"start": true, "stop": true, "migrate": true,
 		"parse": true, "render": true,
+		"holdings": true, "quote": true,
 	}
 	return leafSkipped[cmd.Name()]
 }

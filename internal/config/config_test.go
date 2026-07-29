@@ -160,6 +160,12 @@ func TestLoadDerivesPaths(t *testing.T) {
 	if cfg.PDFStoragePath != "/custom/data/payslips" {
 		t.Errorf("PDFStoragePath = %q, want %q", cfg.PDFStoragePath, "/custom/data/payslips")
 	}
+	if cfg.GrowwTokenPath != "/custom/data/groww_token.json" {
+		t.Errorf("GrowwTokenPath = %q, want %q", cfg.GrowwTokenPath, "/custom/data/groww_token.json")
+	}
+	if cfg.KiteSessionPath != "/custom/data/kite_session.json" {
+		t.Errorf("KiteSessionPath = %q, want %q", cfg.KiteSessionPath, "/custom/data/kite_session.json")
+	}
 }
 
 func TestSaveCreatesConfigDir(t *testing.T) {

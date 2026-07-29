@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"cresto/internal/config"
+	"cresto/internal/groww"
+	"cresto/internal/kite"
 	"cresto/internal/llm"
 	"cresto/internal/pdfstore"
 	"cresto/internal/store"
@@ -52,7 +54,9 @@ func newTestServer(t *testing.T) (*Server, func()) {
 		PDFStoragePath:  filepath.Join(dir, "payslips"),
 	}
 	pdfs := pdfstore.New(cfg.PDFStoragePath)
-	srv, err := New(st, fakeLLMClient{}, cfg, pdfs)
+	growwClient := groww.New(filepath.Join(dir, "groww_token.json"))
+	kiteClient := kite.New(filepath.Join(dir, "kite_session.json"))
+	srv, err := New(st, fakeLLMClient{}, cfg, pdfs, growwClient, kiteClient)
 	if err != nil {
 		st.Close()
 		t.Fatalf("New: %v", err)
@@ -1669,5 +1673,80 @@ func TestNav_UploadInRail(t *testing.T) {
 	}
 	if !strings.Contains(body, `aria-label="Upload payslip"`) {
 		t.Errorf("missing Upload aria-label")
+	}
+}
+
+func TestGroww_NotConnected_ShowsEmptyState(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	rec, _ := doGet(srv, "/groww")
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `class="empty"`) {
+		t.Errorf("not-connected state should use .empty pattern; got: %s", body[:min(400, len(body))])
+	}
+	if !strings.Contains(body, "Connect your Groww account") {
+		t.Errorf("missing connect CTA heading")
+	}
+	if !strings.Contains(body, `href="/groww/connect"`) {
+		t.Errorf("missing connect link")
+	}
+}
+
+func TestGroww_NotConnected_NoImplementationJargon(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	rec, _ := doGet(srv, "/groww")
+	body := rec.Body.String()
+	if strings.Contains(body, "MCP") {
+		t.Errorf("connect copy should not mention MCP (implementation detail); got: %s", body[:min(400, len(body))])
+	}
+	if strings.Contains(body, "Claude") || strings.Contains(body, "Cursor") {
+		t.Errorf("connect copy should not mention other AI tools; got: %s", body[:min(400, len(body))])
+	}
+}
+
+func TestGroww_SessionExpired_ShowsReconnect(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	// Save an expired token so HasExpiredToken returns true.
+	if err := srv.groww.SaveExpiredTokenForTest(); err != nil {
+		t.Fatalf("SaveExpiredTokenForTest: %v", err)
+	}
+	rec, _ := doGet(srv, "/groww")
+	if rec.Code != 200 {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Session expired") {
+		t.Errorf("expired session should show 'Session expired' heading; got: %s", body[:min(400, len(body))])
+	}
+	if !strings.Contains(body, "Reconnect") {
+		t.Errorf("expired session should show Reconnect button")
+	}
+}
+
+func TestGroww_NavItemPresent(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	rec, _ := doGet(srv, "/")
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/groww"`) {
+		t.Errorf("missing Groww nav link")
+	}
+}
+
+func TestGroww_DisconnectRedirects(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	rec, _ := doGet(srv, "/groww/disconnect")
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+	loc := rec.Header().Get("Location")
+	if !strings.HasPrefix(loc, "/groww") {
+		t.Errorf("redirect = %q, want /groww...", loc)
 	}
 }

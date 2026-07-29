@@ -1,0 +1,218 @@
+{{define "page"}}
+<div class="space-y-6">
+  {{if not .Connected}}
+  <!-- Not connected (or session expired): show Connect CTA -->
+  <section class="empty">
+    <header>
+      <figure>
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-3 3"/></svg>
+      </figure>
+      {{if .SessionExpired}}
+      <h3>Session expired</h3>
+      <p>Your Groww connection lapsed (tokens last about 24 hours). Reconnect to see your holdings.</p>
+      {{else}}
+      <h3>Connect your Groww account</h3>
+      <p>View your stock holdings alongside your income. Cresto stores only the access token — your data stays between you and Groww.</p>
+      {{end}}
+    </header>
+    <footer>
+      <a href="/groww/connect" class="btn">{{if .SessionExpired}}Reconnect{{else}}Connect Groww{{end}}</a>
+    </footer>
+  </section>
+
+  {{else if .Error}}
+  <!-- Connected but fetch failed -->
+  <div class="alert" data-variant="destructive">
+    <h2>Could not load holdings</h2>
+    <section>{{.Error}}</section>
+    <footer>
+      <a href="/groww" class="btn" data-variant="outline" data-size="sm">Try again</a>
+      <a href="/groww/connect" class="btn" data-variant="ghost" data-size="sm">Reconnect</a>
+    </footer>
+  </div>
+
+  {{else}}
+  <!-- Connected: render holdings table with AJAX refresh -->
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h2 class="text-xl font-semibold">Stock Holdings</h2>
+      <p class="text-sm text-muted-foreground mt-1" id="groww-fetched-at">Fetched from Groww at {{.FetchedAt}}</p>
+    </div>
+    <div class="flex gap-2">
+      <button type="button" id="groww-refresh" class="btn" data-variant="outline" data-size="sm">
+        <svg class="refresh-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+        <span class="refresh-label">Refresh</span>
+      </button>
+      <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('groww-disconnect-dialog').showModal()">Disconnect</button>
+    </div>
+  </div>
+
+  {{if gt (len .Holdings) 0}}
+  <div class="rounded-lg border overflow-hidden">
+    <table class="table w-full">
+      <thead>
+        <tr>
+          <th>Stock</th>
+          <th class="text-right">Qty</th>
+          <th class="text-right">Avg Price</th>
+          <th class="text-right">Current</th>
+          <th class="text-right">P&L</th>
+          <th class="text-right">P&L %</th>
+        </tr>
+      </thead>
+      <tbody id="groww-holdings-body">
+        {{range .Holdings}}
+        <tr>
+          <td>
+            <div class="font-medium">{{.DisplayName}}</div>
+            <div class="text-xs text-muted-foreground">{{.DisplaySymbol}}</div>
+          </td>
+          <td class="text-right tabular-nums">{{.Quantity}}</td>
+          <td class="text-right tabular-nums money">{{money2 .AvgPrice}}</td>
+          <td class="text-right tabular-nums money">{{money2 .CurrentPrice}}</td>
+          <td class="text-right tabular-nums {{if neg .PnL}}text-destructive{{else}}text-success{{end}} money">{{sign .PnL}}{{money2 .PnL}}</td>
+          <td class="text-right tabular-nums {{if neg .PnLPercent}}text-destructive{{else}}text-success{{end}}">{{sign .PnLPercent}}{{printf "%.2f" .PnLPercent}}%</td>
+        </tr>
+        {{end}}
+      </tbody>
+      <tfoot>
+        <tr class="border-t-2 font-semibold">
+          <td>Total</td>
+          <td colspan="2"></td>
+          <td class="text-right tabular-nums money" id="groww-total-current">{{money2 .TotalCurrent}}</td>
+          <td class="text-right tabular-nums {{if neg .TotalPnL}}text-destructive{{else}}text-success{{end}} money" id="groww-total-pnl">{{sign .TotalPnL}}{{money2 .TotalPnL}}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  {{else if .RawText}}
+  <div class="rounded-lg border bg-card p-4">
+    <pre class="text-sm whitespace-pre-wrap break-words" id="groww-raw-text">{{.RawText}}</pre>
+  </div>
+
+  {{else}}
+  <div class="rounded-lg border bg-card p-8 text-center text-muted-foreground" id="groww-empty">
+    No holdings found in your Groww account.
+  </div>
+  {{end}}
+
+  <dialog class="alert-dialog" id="groww-disconnect-dialog" aria-labelledby="groww-disconnect-title" aria-describedby="groww-disconnect-desc">
+    <div>
+      <header>
+        <h2 id="groww-disconnect-title">Disconnect from Groww?</h2>
+        <p id="groww-disconnect-desc">Cresto will forget your Groww access token. You can reconnect anytime.</p>
+      </header>
+      <footer>
+        <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
+        <a href="/groww/disconnect" class="btn" data-variant="destructive">Disconnect</a>
+      </footer>
+    </div>
+  </dialog>
+
+  <script>
+  (() => {
+    const btn = document.getElementById('groww-refresh');
+    if (!btn) return;
+    const icon = btn.querySelector('.refresh-icon');
+    const label = btn.querySelector('.refresh-label');
+    const fetchedAt = document.getElementById('groww-fetched-at');
+    const toaster = document.getElementById('toaster');
+
+    let refreshing = false;
+
+    function showToast(category, title) {
+      if (toaster && typeof toaster.toast === 'function') {
+        toaster.toast({ category, title });
+      }
+    }
+
+    function fmt(n) {
+      return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
+    }
+    function sign(v) { return v < 0 ? '' : '+'; }
+    function pnlClass(v) { return v < 0 ? 'text-destructive' : 'text-success'; }
+
+    function renderHoldings(data) {
+      const body = document.getElementById('groww-holdings-body');
+      const totalCurrent = document.getElementById('groww-total-current');
+      const totalPnL = document.getElementById('groww-total-pnl');
+      const empty = document.getElementById('groww-empty');
+      const raw = document.getElementById('groww-raw-text');
+
+      if (!data.holdings || data.holdings.length === 0) {
+        if (body) body.innerHTML = '';
+        if (totalCurrent) totalCurrent.textContent = '0.00';
+        if (totalPnL) totalPnL.textContent = '+0.00';
+        return;
+      }
+
+      if (body) {
+        body.innerHTML = data.holdings.map(h => `
+          <tr>
+            <td>
+              <div class="font-medium">${h.title || h.symbol}</div>
+              <div class="text-xs text-muted-foreground">${h.symbol}</div>
+            </td>
+            <td class="text-right tabular-nums">${h.quantity}</td>
+            <td class="text-right tabular-nums money">${fmt(h.avg_price)}</td>
+            <td class="text-right tabular-nums money">${fmt(h.current_price)}</td>
+            <td class="text-right tabular-nums ${pnlClass(h.pnl)} money">${sign(h.pnl)}${fmt(h.pnl)}</td>
+            <td class="text-right tabular-nums ${pnlClass(h.pnl_percent)}">${sign(h.pnl_percent)}${fmt(h.pnl_percent)}%</td>
+          </tr>
+        `).join('');
+      }
+      if (totalCurrent) totalCurrent.textContent = fmt(data.total_current);
+      if (totalPnL) {
+        totalPnL.textContent = sign(data.total_pnl) + fmt(data.total_pnl);
+        totalPnL.className = 'text-right tabular-nums ' + pnlClass(data.total_pnl) + ' money';
+      }
+    }
+
+    btn.addEventListener('click', async () => {
+      if (refreshing) return;
+      refreshing = true;
+      btn.disabled = true;
+      icon.classList.add('animate-spin');
+      label.textContent = 'Refreshing…';
+
+      try {
+        const res = await fetch('/api/groww/holdings', { cache: 'no-store' });
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+        const data = await res.json();
+
+        if (!data.connected) {
+          showToast('warning', 'Session expired — please reconnect');
+          setTimeout(() => window.location.href = '/groww', 1200);
+          return;
+        }
+        if (data.error) {
+          showToast('error', data.error);
+          return;
+        }
+
+        renderHoldings(data);
+        if (fetchedAt) fetchedAt.textContent = 'Fetched from Groww at ' + data.fetched_at;
+        showToast('success', 'Holdings refreshed');
+      } catch (e) {
+        showToast('error', 'Could not reach server');
+      } finally {
+        refreshing = false;
+        btn.disabled = false;
+        icon.classList.remove('animate-spin');
+        label.textContent = 'Refresh';
+      }
+    });
+  })();
+  </script>
+
+  <style>
+    @media (prefers-reduced-motion: no-preference) {
+      .animate-spin { animation: spin 0.8s linear infinite; }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+  {{end}}
+</div>
+{{end}}
