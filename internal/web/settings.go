@@ -11,10 +11,16 @@ import (
 type settingsView struct {
 	Groww     brokerStatus
 	Kite      brokerStatus
+	GreytHR   greythrStatus
 	LLMURL    string
 	LLMModel  string
-	LLMAPIKey string // current API key (empty for local, no-auth setups)
-	LLMHealth string // raw state from llmClient.Health(): loaded, server_down, etc.
+	LLMAPIKey string
+	LLMHealth string
+}
+
+type greythrStatus struct {
+	Connected bool
+	Host      string
 }
 
 // handleSettings renders the settings page with broker connection management
@@ -32,10 +38,16 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			Name:      "Kite",
 			Connected: s.kite.Connected(),
 		},
+		GreytHR: greythrStatus{
+			Connected: s.greythr.Connected(),
+		},
 		LLMURL:    s.cfg.LMStudioBaseURL,
 		LLMModel:  s.cfg.ModelName,
 		LLMAPIKey: s.cfg.LMStudioAPIKey,
 		LLMHealth: s.llmClient.Health(),
+	}
+	if sess, err := s.greythr.LoadSession(); err == nil {
+		v.GreytHR.Host = sess.Host
 	}
 
 	s.render(w, "settings", struct {

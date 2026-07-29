@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"cresto/internal/config"
+	"cresto/internal/greythr"
 	"cresto/internal/groww"
 	"cresto/internal/kite"
 	"cresto/internal/llm"
@@ -57,7 +58,8 @@ func newTestServer(t *testing.T) (*Server, func()) {
 	pdfs := pdfstore.New(cfg.PDFStoragePath)
 	growwClient := groww.New(filepath.Join(dir, "groww_token.json"))
 	kiteClient := kite.New(filepath.Join(dir, "kite_session.json"))
-	srv, err := New(st, fakeLLMClient{}, cfg, pdfs, growwClient, kiteClient)
+	greythrClient := greythr.New(filepath.Join(dir, "greythr_session.json"))
+	srv, err := New(st, fakeLLMClient{}, cfg, pdfs, growwClient, kiteClient, greythrClient)
 	if err != nil {
 		st.Close()
 		t.Fatalf("New: %v", err)

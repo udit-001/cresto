@@ -28,5 +28,11 @@ internal/web/static/app.css
 data/
 payslips/
 
+# Secrets (AMO credentials for extension signing)
+.env
+
+# web-ext build artifacts (intermediate, not committed)
+web-ext-artifacts/
+
 # Build artifacts
 /bin/

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"cresto/internal/config"
+	"cresto/internal/greythr"
 	"cresto/internal/groww"
 	"cresto/internal/kite"
 	"cresto/internal/llm"
@@ -45,7 +46,8 @@ func runServer(cfg config.Config, addr string, silent bool) error {
 	pdfs := pdfstore.New(cfg.PDFStoragePath)
 	growwClient := groww.New(cfg.GrowwTokenPath)
 	kiteClient := kite.New(cfg.KiteSessionPath)
-	srv, err := web.New(st, client, cfg, pdfs, growwClient, kiteClient)
+	greythrClient := greythr.New(cfg.GreytHRSessionPath)
+	srv, err := web.New(st, client, cfg, pdfs, growwClient, kiteClient, greythrClient)
 	if err != nil {
 		return fmt.Errorf("init server: %w", err)
 	}

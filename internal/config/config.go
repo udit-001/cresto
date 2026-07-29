@@ -16,13 +16,14 @@ type Config struct {
 	DataDir         string `toml:"data_dir"`
 	Port            int    `toml:"port"`
 
-	// SQLitePath, PDFStoragePath, GrowwTokenPath, and KiteSessionPath
-	// are derived from DataDir and set during Load / Default.
+	// SQLitePath, PDFStoragePath, GrowwTokenPath, KiteSessionPath, and
+	// GreytHRSessionPath are derived from DataDir and set during Load / Default.
 	// They are not TOML fields.
-	SQLitePath      string `toml:"-"`
-	PDFStoragePath  string `toml:"-"`
-	GrowwTokenPath  string `toml:"-"`
-	KiteSessionPath string `toml:"-"`
+	SQLitePath        string `toml:"-"`
+	PDFStoragePath    string `toml:"-"`
+	GrowwTokenPath    string `toml:"-"`
+	KiteSessionPath   string `toml:"-"`
+	GreytHRSessionPath string `toml:"-"`
 }
 
 const DefaultPort = 7777
@@ -93,17 +94,26 @@ func KiteSessionPath(cfg *Config) string {
 	return filepath.Join(dir, "kite_session.json")
 }
 
+func GreytHRSessionPath(cfg *Config) string {
+	dir := DefaultDataDir()
+	if cfg != nil && cfg.DataDir != "" {
+		dir = cfg.DataDir
+	}
+	return filepath.Join(dir, "greythr_session.json")
+}
+
 func Default() Config {
 	dataDir := DefaultDataDir()
 	return Config{
-		LMStudioBaseURL: "http://localhost:1234/v1",
-		ModelName:       "mistralai/ministral-3-3b",
-		DataDir:         dataDir,
-		SQLitePath:      filepath.Join(dataDir, "income.db"),
-		PDFStoragePath:  filepath.Join(dataDir, "payslips"),
-		GrowwTokenPath:  filepath.Join(dataDir, "groww_token.json"),
-		KiteSessionPath: filepath.Join(dataDir, "kite_session.json"),
-		Port:            DefaultPort,
+		LMStudioBaseURL:   "http://localhost:1234/v1",
+		ModelName:         "mistralai/ministral-3-3b",
+		DataDir:           dataDir,
+		SQLitePath:        filepath.Join(dataDir, "income.db"),
+		PDFStoragePath:    filepath.Join(dataDir, "payslips"),
+		GrowwTokenPath:    filepath.Join(dataDir, "groww_token.json"),
+		KiteSessionPath:   filepath.Join(dataDir, "kite_session.json"),
+		GreytHRSessionPath: filepath.Join(dataDir, "greythr_session.json"),
+		Port:              DefaultPort,
 	}
 }
 
@@ -137,6 +147,7 @@ func Load() (*Config, error) {
 	cfg.PDFStoragePath = PDFsPath(&cfg)
 	cfg.GrowwTokenPath = GrowwTokenPath(&cfg)
 	cfg.KiteSessionPath = KiteSessionPath(&cfg)
+	cfg.GreytHRSessionPath = GreytHRSessionPath(&cfg)
 	return &cfg, nil
 }
 

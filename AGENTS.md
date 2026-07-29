@@ -30,7 +30,7 @@ make goose-install   # install goose CLI binary (for migrate-create only)
 go build -o ~/go/bin/cresto .   # install binary to PATH
 ```
 
-Data lives at `~/.cresto/` (income.db + payslips/ + groww_token.json + kite_session.json).
+Data lives at `~/.cresto/` (income.db + payslips/ + groww_token.json + kite_session.json + greythr_session.json).
 PID file at `~/.config/cresto/server.pid`, daemon logs at `~/.cresto/server.log`.
 
 ## Server commands
@@ -53,6 +53,7 @@ internal/
   mcp/             # Shared MCP protocol client (JSON-RPC, SSE)
   groww/           # Groww broker adapter (OAuth + holdings)
   kite/            # Kite/Zerodha broker adapter (session auth + holdings/MF/trades)
+  greythr/         # greytHR ESS adapter (cookie auth + JSON payslip data)
 ```
 
 ## Template gotchas
@@ -135,3 +136,34 @@ Cresto connects to Groww and Zerodha (Kite) via their free MCP servers for live 
 - **Groww token expires daily**: reconnect via web UI (`/groww` → Connect).
 - **Kite session can become invalid**: reconnect via web UI (`/kite` → Connect).
 - Broker connections happen through the web UI, not CLI. The CLI reads the saved token/session files.
+
+## greytHR payslip auto-fetch
+
+Cresto fetches payslips from greytHR's Employee Self Service (ESS) portal using cookie-based auth and greytHR's internal JSON APIs. This is a **JSON-first** path — no PDF download or LLM vision extraction needed for data. The PDF is still downloaded for archival so the review UI can display it.
+
+### Architecture
+
+- `internal/greythr/` — ESS adapter. Cookie auth (user pastes `access_token` from browser DevTools). Three API calls:
+  - `ListPayslipMonths` → `GET /v3/api/payroll/months/{profile_id}/published?type=payslip` — list of released payslip periods
+  - `FetchPayslipData` → `GET /v3/api/payroll/payslip/{profile_id}/{payslip_id}/published` — **full structured payslip data as JSON** (earnings, deductions, net pay, all hierarchical)
+  - `DownloadPayslipPDF` → `GET /v3/api/payroll/payslip/{profile_id}/{payslip_id}/download` — PDF for archival
+- `greythr.MapToPayslip` converts the JSON response directly to `store.Payslip` — bypasses the render → LLM extract → classify pipeline entirely. Uses a direct name→canonical map (e.g. `BASIC` → `basic`, `PF` → `epf`) with keyword fallback.
+- Session at `~/.cresto/greythr_session.json` (0600 perms): host, access_token, profile_id, email.
+- PDFs saved with subdomain prefix (e.g. `gyansys_Payslip_Jun_2026.pdf`) for multi-employer disambiguation.
+
+### Web UI
+
+- `/greythr` — connect (paste host + access_token + profile_id), disconnect, list available months, fetch button
+- `/settings` — greytHR connection status card with link to `/greythr`
+- Fetch runs as a background batch (same `upload_batches` table + progress page as PDF uploads). Payslips enter as `pending_review`.
+
+### CLI commands
+
+- `cresto greythr fetch` — fetch all unpublished payslips. Reads saved session, dedups against existing DB payslips by period, skips empty (zero-value) months. No server required (reads session file + writes to DB directly).
+
+### Limitations
+
+- **Cookie expires**: greytHR sessions are short-lived (Ory Kratos tokens). Reconnect via web UI (`/greythr` → paste new token).
+- **Manual cookie extraction**: one-time setup requires copying the `access_token` cookie from browser DevTools. Profile ID must be found in network requests.
+- **Reverse-engineered API**: uses greytHR's internal ESS endpoints, not the official admin API. Could change with greytHR updates.
+- **Single profile**: one greytHR account per Cresto instance (one session file).

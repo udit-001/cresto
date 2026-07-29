@@ -1,5 +1,9 @@
 .PHONY: build css dev start stop test vet fmt clean tailwind-download \
-        goose-install migrate-up migrate-down migrate-status migrate-create
+        goose-install migrate-up migrate-down migrate-status migrate-create \
+        sign-extension
+
+# Load secrets (AMO credentials) if .env exists.
+-include .env
 
 # Build the binary (rebuilds CSS first so the embed is fresh).
 build: css
@@ -81,3 +85,15 @@ goose-install:
 # Create a new migration file. Usage: make migrate-create name=add_column
 migrate-create:
 	goose -dir $(MIGRATE_DIR) create $(name) sql
+
+# --- Firefox extension signing ---
+# Signs the extension via Mozilla AMO (unlisted = self-distributed, not public).
+# Credentials are read from .env (gitignored). Get yours at:
+# https://addons.mozilla.org/developers/addon/api/key/
+sign-extension:
+	@test -n "$(AMO_KEY)" || (echo "AMO_KEY not set — create .env (see .gitignore)" && false)
+	@test -n "$(AMO_SECRET)" || (echo "AMO_SECRET not set — create .env (see .gitignore)" && false)
+	npx web-ext sign --channel=unlisted --source-dir=extension \
+		--api-key=$(AMO_KEY) --api-secret=$(AMO_SECRET)
+	cp web-ext-artifacts/*.xpi internal/web/extension/cresto-greyhr-connector.xpi
+	@echo "Signed XPI copied to internal/web/extension/"

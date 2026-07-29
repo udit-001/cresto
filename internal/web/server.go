@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"cresto/internal/config"
+	"cresto/internal/greythr"
 	"cresto/internal/groww"
 	"cresto/internal/kite"
 	"cresto/internal/llm"
@@ -27,7 +28,7 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-//go:embed templates static
+//go:embed templates static extension
 var contentFS embed.FS
 
 // tmplFuncs are the formatting helpers exposed to every page template.
@@ -388,13 +389,14 @@ type Server struct {
 	pdfs      *pdfstore.Store
 	groww     *groww.Client
 	kite      *kite.Client
+	greythr   *greythr.Client
 	pages     map[string]*template.Template
 }
 
 // New wires the server's dependencies but does not start listening. The caller
 // owns the store, LLMClient, and pdfs lifetimes; closing them is the caller's job.
-func New(s *store.Store, client LLMClient, cfg config.Config, pdfs *pdfstore.Store, growwClient *groww.Client, kiteClient *kite.Client) (*Server, error) {
-	pageNames := []string{"dashboard", "upload", "batch_progress", "payslip_detail", "payslips_list", "component_detail", "annual", "error", "portfolio", "settings"}
+func New(s *store.Store, client LLMClient, cfg config.Config, pdfs *pdfstore.Store, growwClient *groww.Client, kiteClient *kite.Client, greythrClient *greythr.Client) (*Server, error) {
+	pageNames := []string{"dashboard", "upload", "batch_progress", "payslip_detail", "payslips_list", "component_detail", "annual", "error", "portfolio", "settings", "greythr"}
 	pages := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {
 		t, err := template.New("").Funcs(tmplFuncs).ParseFS(contentFS,
@@ -405,7 +407,7 @@ func New(s *store.Store, client LLMClient, cfg config.Config, pdfs *pdfstore.Sto
 		}
 		pages[name] = t
 	}
-	return &Server{store: s, llmClient: client, cfg: cfg, pdfs: pdfs, groww: growwClient, kite: kiteClient, pages: pages}, nil
+	return &Server{store: s, llmClient: client, cfg: cfg, pdfs: pdfs, groww: growwClient, kite: kiteClient, greythr: greythrClient, pages: pages}, nil
 }
 
 // formatMoney renders a float as a grouped decimal, dropping the fractional
@@ -497,6 +499,18 @@ func (s *Server) Routes() *http.ServeMux {
 	// Settings: broker + LLM connection management (PF-64).
 	mux.HandleFunc("GET /settings", s.handleSettings)
 	mux.HandleFunc("POST /settings/llm", s.handleSettingsLLM)
+
+	// greytHR: payslip auto-fetch from the ESS portal.
+	mux.HandleFunc("GET /greythr", s.handleGreytHRPage)
+	mux.HandleFunc("GET /greythr/connect", s.handleGreytHRConnectForm)
+	mux.HandleFunc("POST /greythr/connect", s.handleGreytHRConnect)
+	mux.HandleFunc("POST /greythr/disconnect", s.handleGreytHRDisconnect)
+	mux.HandleFunc("POST /greythr/fetch", s.handleGreytHRFetch)
+	mux.HandleFunc("GET /api/greythr/months", s.handleGreytHRMonthsAPI)
+
+	// Extension download: serves the embedded extension/ as a .xpi (zip)
+	// for one-click install in Firefox. Chrome users load it unpacked.
+	mux.HandleFunc("GET /greythr/extension.xpi", s.handleGreytHRExtension)
 
 	// Static assets: CSS, JS. fs.Sub scopes the embed to /static.
 	staticFS, err := fs.Sub(contentFS, "static")

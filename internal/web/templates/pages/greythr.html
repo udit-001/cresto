@@ -1,0 +1,248 @@
+{{define "page"}}
+<div class="space-y-8">
+  <section class="space-y-3">
+    <p class="text-sm text-muted-foreground text-pretty">Auto-fetch payslips from your greytHR ESS portal. Cresto uses greytHR's JSON API for structured data — no LLM extraction needed. PDFs are downloaded for archival.</p>
+
+    {{if .FetchError}}
+    <div class="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm text-warning">
+      {{.FetchError}}
+    </div>
+    {{end}}
+
+    {{if .Connected}}
+    <!-- ═══ Connected + valid session ═══ -->
+    <div class="rounded-lg border bg-card p-4 space-y-4">
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <div>
+            <div class="font-medium">{{.Host}}</div>
+            <div class="text-sm text-muted-foreground">Profile ID: {{.ProfileID}}{{if .Email}} · {{.Email}}{{end}}</div>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <form method="POST" action="/greythr/fetch">
+            <button type="submit" class="btn" data-size="sm">Fetch Payslips</button>
+          </form>
+          <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('greythr-disconnect-dialog').showModal()">Disconnect</button>
+        </div>
+      </div>
+
+      {{if .Months}}
+      <div class="border-t pt-3">
+        <div class="text-sm font-medium mb-2">Available payslips ({{len .Months}})</div>
+        <div class="space-y-1 max-h-60 overflow-y-auto">
+          {{range .Months}}
+          <div class="flex items-center justify-between gap-2 text-sm py-1 px-2 rounded {{if .Released}}hover:bg-muted{{else}}opacity-50{{end}}">
+            <span>{{.Month}}</span>
+            <span class="text-xs text-muted-foreground">{{if .Released}}Released{{else}}Not released{{end}}</span>
+          </div>
+          {{end}}
+        </div>
+        <p class="text-xs text-muted-foreground mt-2">Fetch downloads all released payslips that aren't already in Cresto. Each payslip enters as <code class="text-xs bg-muted px-1 py-0.5 rounded">pending_review</code> — confirm them in the review queue.</p>
+      </div>
+      {{end}}
+    </div>
+
+    {{else if .Expired}}
+    <!-- ═══ Connected but session expired ═══ -->
+    <div class="rounded-lg border border-warning/30 bg-warning/5 p-4 space-y-3">
+      <div class="flex items-center gap-2">
+        <svg class="text-warning" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+        <div class="font-medium">Session expired</div>
+      </div>
+      <p class="text-sm text-muted-foreground">Your greytHR session has expired. Reconnect using the extension or manual setup below.</p>
+    </div>
+
+    <!-- Extension re-connect guidance -->
+    <div id="ext-installed" class="rounded-lg border border-success/30 bg-success/5 p-4 space-y-2" style="display:none">
+      <div class="flex items-center gap-2">
+        <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <div class="font-medium text-sm">Extension installed — reconnect in one click</div>
+      </div>
+      <ol class="list-decimal list-inside text-xs text-muted-foreground space-y-1">
+        <li>Open your greytHR ESS portal and log in{{if .Host}} — <a href="https://{{.Host}}" class="underline text-foreground" target="_blank" rel="noopener">{{.Host}} ↗</a>{{end}}</li>
+        <li>Click the Cresto extension icon in your toolbar</li>
+        <li>Click Connect — your session refreshes automatically</li>
+      </ol>
+    </div>
+
+    <!-- Install extension (if not installed) -->
+    <div id="ext-install" class="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3" style="display:none">
+      <div class="font-medium text-sm">Reconnect with browser extension</div>
+      <div id="ext-firefox" class="space-y-2" style="display:none">
+        <a href="/greythr/extension.xpi" class="btn" data-variant="outline" data-size="sm">Install Extension</a>
+      </div>
+      <div id="ext-chrome" class="space-y-2" style="display:none">
+        <ol class="list-decimal list-inside text-xs text-muted-foreground space-y-1">
+          <li>Go to <code class="bg-muted px-1 py-0.5 rounded">chrome://extensions/</code></li>
+          <li>Enable Developer mode → Load unpacked → select <code class="bg-muted px-1 py-0.5 rounded">extension/</code></li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- Manual fallback (collapsed) -->
+    <details class="rounded-lg border bg-card p-4 group">
+      <summary class="text-sm font-medium cursor-pointer flex items-center gap-2 list-none">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground transition-transform duration-200 group-open:rotate-90"><path d="m9 18 6-6-6-6"/></svg>
+        Prefer manual setup?
+      </summary>
+      <form method="POST" action="/greythr/connect" class="mt-3 space-y-3">
+        <div>
+          <label class="text-sm font-medium" for="gt-host">Host</label>
+          <input type="text" id="gt-host" name="host" value="{{.Host}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="company.greythr.com" required>
+        </div>
+        <div>
+          <label class="text-sm font-medium" for="gt-token">Access Token</label>
+          <input type="password" id="gt-token" name="access_token" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="ory_at_..." required>
+          <p class="text-xs text-muted-foreground mt-1">From browser DevTools → Application → Cookies → access_token.</p>
+        </div>
+        <div>
+          <label class="text-sm font-medium" for="gt-pid">Profile ID</label>
+          <input type="number" id="gt-pid" name="profile_id" value="{{if .ProfileID}}{{.ProfileID}}{{end}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="2793" required>
+        </div>
+        <button type="submit" class="btn" data-size="sm">Reconnect</button>
+      </form>
+    </details>
+
+    {{else}}
+    <!-- ═══ Never connected ═══ -->
+
+    <!-- Extension installed — next steps -->
+    <div id="ext-installed" class="rounded-lg border border-success/30 bg-success/5 p-4 space-y-2" style="display:none">
+      <div class="flex items-center gap-2">
+        <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <div class="font-medium text-sm">Extension installed — you're almost there</div>
+      </div>
+      <ol class="list-decimal list-inside text-xs text-muted-foreground space-y-1">
+        <li>Open your greytHR ESS portal and log in <a href="https://greythr.com" class="underline text-foreground" target="_blank" rel="noopener">greythr.com ↗</a></li>
+        <li>Click the Cresto extension icon in your browser toolbar</li>
+        <li>Click Connect — your session details are sent automatically</li>
+      </ol>
+    </div>
+
+    <!-- Extension not installed — install instructions -->
+    <div id="ext-install" class="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3" style="display:none">
+      <div class="font-medium text-sm">Quick connect with browser extension</div>
+      <div id="ext-firefox" class="space-y-2" style="display:none">
+        <div class="text-sm font-medium">Firefox</div>
+        <a href="/greythr/extension.xpi" class="btn" data-variant="outline" data-size="sm">Install Extension</a>
+        <p class="text-xs text-muted-foreground">Click to install — the extension is signed by Mozilla and works on release Firefox.</p>
+      </div>
+      <div id="ext-chrome" class="space-y-2" style="display:none">
+        <div class="text-sm font-medium">Chrome</div>
+        <ol class="list-decimal list-inside text-xs text-muted-foreground space-y-1">
+          <li>Go to <code class="bg-muted px-1 py-0.5 rounded">chrome://extensions/</code></li>
+          <li>Enable Developer mode (top-right toggle)</li>
+          <li>Click "Load unpacked" and select the <code class="bg-muted px-1 py-0.5 rounded">extension/</code> folder from the Cresto repo</li>
+        </ol>
+      </div>
+      <div class="border-t pt-3">
+        <p class="text-xs text-muted-foreground">After installing: log into your greytHR ESS portal, click the extension icon, and hit Connect. The extension reads your session cookie and sends it to Cresto — no password stored.</p>
+      </div>
+    </div>
+
+    <!-- Manual fallback (collapsed) -->
+    <details class="rounded-lg border bg-card p-4 group">
+      <summary class="text-sm font-medium cursor-pointer flex items-center gap-2 list-none">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground transition-transform duration-200 group-open:rotate-90"><path d="m9 18 6-6-6-6"/></svg>
+        Prefer manual setup?
+      </summary>
+      <form method="POST" action="/greythr/connect" class="mt-3 space-y-3">
+        <div>
+          <label class="text-sm font-medium" for="gt-host">Host</label>
+          <input type="text" id="gt-host" name="host" value="{{.Prefill.Host}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="company.greythr.com" required>
+        </div>
+        <div>
+          <label class="text-sm font-medium" for="gt-token">Access Token</label>
+          <input type="password" id="gt-token" name="access_token" value="{{.Prefill.AccessToken}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="ory_at_..." required>
+          <p class="text-xs text-muted-foreground mt-1">From browser DevTools → Application → Cookies → access_token.</p>
+        </div>
+        <div>
+          <label class="text-sm font-medium" for="gt-pid">Profile ID</label>
+          <input type="number" id="gt-pid" name="profile_id" value="{{.Prefill.ProfileID}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="2793" required>
+        </div>
+        <button type="submit" class="btn" data-size="sm">Connect</button>
+      </form>
+    </details>
+
+    {{end}}
+  </section>
+
+  {{if or .Connected .Expired}}
+  <dialog class="alert-dialog" id="greythr-disconnect-dialog" aria-labelledby="greythr-disconnect-title" aria-describedby="greythr-disconnect-desc">
+    <div>
+      <header>
+        <h2 id="greythr-disconnect-title">Disconnect from greytHR?</h2>
+        <p id="greythr-disconnect-desc">Cresto will forget your greytHR access token. Already-fetched payslips stay in the database. You can reconnect anytime.</p>
+      </header>
+      <footer>
+        <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
+        <form method="POST" action="/greythr/disconnect" class="inline">
+          <button type="submit" class="btn" data-variant="destructive">Disconnect</button>
+        </form>
+      </footer>
+    </div>
+  </dialog>
+  {{end}}
+</div>
+
+<script>
+  (() => {
+    const installDiv = document.getElementById('ext-install');
+    const installedDiv = document.getElementById('ext-installed');
+    if (!installDiv && !installedDiv) return;
+
+    const firefoxDiv = document.getElementById('ext-firefox');
+    const chromeDiv = document.getElementById('ext-chrome');
+    const ua = navigator.userAgent;
+    const isFirefox = ua.includes('Firefox');
+    const isChrome = ua.includes('Chrome') || ua.includes('Chromium');
+
+    let detected = false;
+
+    function showInstalled() {
+      if (detected) return;
+      detected = true;
+      if (installedDiv) installedDiv.style.display = '';
+      if (installDiv) installDiv.style.display = 'none';
+    }
+
+    function showInstallInstructions() {
+      if (detected) return;
+      if (installDiv) {
+        installDiv.style.display = '';
+        if (isFirefox && firefoxDiv) firefoxDiv.style.display = '';
+        else if (isChrome && chromeDiv) chromeDiv.style.display = '';
+        else {
+          if (firefoxDiv) firefoxDiv.style.display = '';
+          if (chromeDiv) chromeDiv.style.display = '';
+        }
+      }
+    }
+
+    function isMarkerPresent() {
+      return document.getElementById('cresto-extension-installed') !== null ||
+             document.documentElement.getAttribute('data-cresto-extension') === 'installed';
+    }
+
+    if (isMarkerPresent()) {
+      showInstalled();
+    } else {
+      const observer = new MutationObserver(() => {
+        if (isMarkerPresent()) {
+          showInstalled();
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+      setTimeout(() => {
+        if (!detected) {
+          observer.disconnect();
+          showInstallInstructions();
+        }
+      }, 5000);
+    }
+  })();
+</script>
+{{end}}

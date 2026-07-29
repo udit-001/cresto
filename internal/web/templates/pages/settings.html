@@ -58,6 +58,31 @@
     </div>
   </section>
 
+  <!-- greytHR -->
+  <section class="space-y-3">
+    <div>
+      <h2 class="text-xl font-semibold leading-tight text-balance">greytHR</h2>
+      <p class="text-sm text-muted-foreground mt-1 text-pretty">Auto-fetch payslips from your greytHR ESS portal. Uses greytHR's JSON API — no LLM extraction needed.</p>
+    </div>
+
+    <div class="flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
+      <div class="flex items-center gap-3">
+        {{if .GreytHR.Connected}}
+        <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        {{else}}
+        <svg class="text-muted-foreground" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+        {{end}}
+        <div>
+          <div class="font-medium">greytHR {{if .GreytHR.Host}}<span class="text-muted-foreground font-normal text-sm">({{.GreytHR.Host}})</span>{{end}}</div>
+          <div class="text-sm {{if .GreytHR.Connected}}text-success{{else}}text-muted-foreground{{end}}">
+            {{if .GreytHR.Connected}}Connected{{else}}Not connected{{end}}
+          </div>
+        </div>
+      </div>
+      <a href="/greythr" class="btn" data-variant="outline" data-size="sm">{{if .GreytHR.Connected}}Manage{{else}}Connect{{end}}</a>
+    </div>
+  </section>
+
   <!-- LLM Studio -->
   <section class="space-y-3">
     <div>
