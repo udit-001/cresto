@@ -393,7 +393,7 @@ type Server struct {
 // New wires the server's dependencies but does not start listening. The caller
 // owns the store, LLMClient, and pdfs lifetimes; closing them is the caller's job.
 func New(s *store.Store, client LLMClient, cfg config.Config, pdfs *pdfstore.Store, growwClient *groww.Client, kiteClient *kite.Client) (*Server, error) {
-	pageNames := []string{"dashboard", "upload", "batch_progress", "payslip_detail", "payslips_list", "component_detail", "annual", "error", "groww", "kite", "portfolio"}
+	pageNames := []string{"dashboard", "upload", "batch_progress", "payslip_detail", "payslips_list", "component_detail", "annual", "error", "portfolio"}
 	pages := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {
 		t, err := template.New("").Funcs(tmplFuncs).ParseFS(contentFS,
@@ -479,20 +479,14 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /annual", s.handleAnnual)
 	mux.HandleFunc("GET /pdf/{id}", s.handleServePDF)
 
-	// Groww integration: OAuth connect/disconnect action routes. The /groww
-	// page route still exists (deleted in PF-63 when /portfolio fully replaces
-	// it); connect/disconnect redirect to /portfolio after completion.
-	mux.HandleFunc("GET /groww", s.handleGroww)
+	// Groww integration: connect/disconnect action routes. The /groww page
+	// is replaced by /portfolio (PF-63); these action routes stay.
 	mux.HandleFunc("GET /groww/connect", s.handleGrowwConnect)
 	mux.HandleFunc("GET /groww/disconnect", s.handleGrowwDisconnect)
-	mux.HandleFunc("GET /api/groww/holdings", s.handleGrowwHoldingsAPI)
 
-	// Kite integration: connect/disconnect action routes. Same as Groww —
-	// the /kite page route is transitional, removed in PF-63.
-	mux.HandleFunc("GET /kite", s.handleKite)
+	// Kite integration: connect/disconnect action routes. Same as Groww.
 	mux.HandleFunc("GET /kite/connect", s.handleKiteConnect)
 	mux.HandleFunc("GET /kite/disconnect", s.handleKiteDisconnect)
-	mux.HandleFunc("GET /api/kite/holdings", s.handleKiteHoldingsAPI)
 
 	// Portfolio: consolidated view of all broker holdings (PF-60). Replaces
 	// the separate /groww and /kite pages.
@@ -1313,81 +1307,12 @@ func (s *Server) handleServePDF(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, s.pdfs.Abs(p.RawPDFPath))
 }
 
-// --- Groww handlers ---
-
-// growwView is the shared state for the Groww page, computed once and
-// serialized as either HTML (wrapped in pageData) or JSON (for the Refresh
-// button's AJAX update). Both handleGroww and handleGrowwHoldingsAPI call
-// prepareGrowwView so the fetch + error-handling + totals logic lives in
-// one place, not two.
-type growwView struct {
-	Connected      bool
-	SessionExpired bool
-	Holdings       []groww.Holding
-	RawText        string
-	Error          string
-	FetchedAt      string
-	TotalCurrent   float64
-	TotalPnL       float64
-	TotalInvested  float64
-}
-
-// prepareGrowwView fetches holdings from Groww (if connected) and computes
-// the view model. It classifies the connection state (connected / expired /
-// error) and translates raw errors to user-facing copy. Both the HTML page
-// handler and the JSON API handler call this — the only difference is how
-// they serialize the result.
-func (s *Server) prepareGrowwView(ctx context.Context) growwView {
-	v := growwView{Connected: s.groww.Connected()}
-
-	if !v.Connected {
-		v.SessionExpired = s.groww.HasExpiredToken()
-		return v
-	}
-
-	result, err := s.groww.Holdings(ctx)
-	if err != nil {
-		if errors.Is(err, groww.ErrNotConnected) {
-			v.Connected = false
-			v.SessionExpired = true
-		} else {
-			v.Error = userFacingBrokerError("Groww", err)
-		}
-		return v
-	}
-
-	v.Holdings = result.Holdings
-	v.RawText = result.RawText
-	v.FetchedAt = result.FetchedAt.Format("3:04 PM, Jan 2")
-	for _, h := range result.Holdings {
-		v.TotalInvested += h.InvestedValue
-		v.TotalCurrent += h.CurrentValue
-		v.TotalPnL += h.PnL
-	}
-	return v
-}
-
-// handleGroww renders the Groww integration page. When connected, it fetches
-// holdings via the MCP and displays them. When not connected, it shows a
-// Connect button. Token-expired state prompts reconnection.
-func (s *Server) handleGroww(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	pending, _ := s.store.ListPendingReview(ctx)
-	v := s.prepareGrowwView(ctx)
-
-	s.render(w, "groww", struct {
-		pageData
-		growwView
-	}{
-		pageData:  pageData{Title: "Groww", PendingCount: len(pending), ActiveBatchID: s.activeBatchID(ctx), Active: "groww"},
-		growwView: v,
-	})
-}
+// --- Broker connect/disconnect handlers ---
 
 // userFacingBrokerError translates a broker MCP/API error to a short,
 // user-facing message. Raw Go error strings are developer-facing — the
 // surface should diagnose the problem in plain language and point toward
-// recovery. Shared by both Groww and Kite handlers.
+// recovery. Shared by the portfolio view and connect/disconnect handlers.
 func userFacingBrokerError(brokerName string, err error) string {
 	msg := err.Error()
 	switch {
@@ -1406,7 +1331,7 @@ func userFacingBrokerError(brokerName string, err error) string {
 
 // handleGrowwConnect starts the OAuth flow and redirects the user's browser
 // to Groww's authorize page. The transient localhost:52155 listener handles
-// the callback and redirects back to /groww.
+// the callback and redirects back to /portfolio.
 func (s *Server) handleGrowwConnect(w http.ResponseWriter, r *http.Request) {
 	returnURL := "http://" + r.Host + "/portfolio"
 	authURL, err := s.groww.StartAuth(returnURL)
@@ -1417,7 +1342,7 @@ func (s *Server) handleGrowwConnect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, authURL, http.StatusSeeOther)
 }
 
-// handleGrowwDisconnect deletes the stored token and redirects back to /groww.
+// handleGrowwDisconnect deletes the stored token and redirects to /portfolio.
 func (s *Server) handleGrowwDisconnect(w http.ResponseWriter, r *http.Request) {
 	if err := s.groww.Disconnect(); err != nil {
 		s.renderError(w, http.StatusInternalServerError, "Could not disconnect: "+err.Error())
@@ -1426,123 +1351,7 @@ func (s *Server) handleGrowwDisconnect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/portfolio?toast=Disconnected&variant=info", http.StatusSeeOther)
 }
 
-// handleGrowwHoldingsAPI returns holdings as JSON for the Refresh button's
-// AJAX update. Avoids a full page reload when the user just wants fresh data.
-// Shares the same prepareGrowwView as the HTML handler so the fetch +
-// error-handling + totals logic is not duplicated.
-type growwHoldingJSON struct {
-	Symbol       string  `json:"symbol"`
-	Title        string  `json:"title"`
-	Quantity     float64 `json:"quantity"`
-	AvgPrice     float64 `json:"avg_price"`
-	CurrentPrice float64 `json:"current_price"`
-	PnL          float64 `json:"pnl"`
-	PnLPercent   float64 `json:"pnl_percent"`
-}
-
-type growwHoldingsResponse struct {
-	Connected    bool               `json:"connected"`
-	Holdings     []growwHoldingJSON `json:"holdings"`
-	TotalCurrent float64            `json:"total_current"`
-	TotalPnL     float64            `json:"total_pnl"`
-	FetchedAt    string             `json:"fetched_at"`
-	Error        string             `json:"error,omitempty"`
-}
-
-func (s *Server) handleGrowwHoldingsAPI(w http.ResponseWriter, r *http.Request) {
-	v := s.prepareGrowwView(r.Context())
-
-	holdings := make([]growwHoldingJSON, 0, len(v.Holdings))
-	for _, h := range v.Holdings {
-		holdings = append(holdings, growwHoldingJSON{
-			Symbol:       h.DisplaySymbol(),
-			Title:        h.Title,
-			Quantity:     h.Quantity,
-			AvgPrice:     h.AvgPrice,
-			CurrentPrice: h.CurrentPrice(),
-			PnL:          h.PnL,
-			PnLPercent:   h.PnLPercent,
-		})
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(growwHoldingsResponse{
-		Connected:    v.Connected,
-		Holdings:     holdings,
-		TotalCurrent: v.TotalCurrent,
-		TotalPnL:     v.TotalPnL,
-		FetchedAt:    v.FetchedAt,
-		Error:        v.Error,
-	})
-}
-
-// --- Kite handlers ---
-
-// kiteView is the shared state for the Kite page, computed once and
-// serialized as either HTML or JSON. Mirrors the growwView pattern.
-type kiteView struct {
-	Connected    bool
-	Holdings     []kite.Holding
-	MFHoldings   []kite.MFHolding
-	Trades       []kite.Trade
-	RawText      string
-	Error        string
-	FetchedAt    string
-	TotalCurrent float64
-	TotalPnL     float64
-}
-
-func (s *Server) prepareKiteView(ctx context.Context) kiteView {
-	v := kiteView{Connected: s.kite.Connected()}
-	if !v.Connected {
-		return v
-	}
-
-	eqResult, err := s.kite.Holdings(ctx)
-	if err != nil {
-		if errors.Is(err, kite.ErrNotConnected) {
-			v.Connected = false
-		} else {
-			v.Error = userFacingKiteError(err)
-		}
-		return v
-	}
-	v.Holdings = eqResult.Holdings
-	v.RawText = eqResult.RawText
-	v.FetchedAt = eqResult.FetchedAt.Format("3:04 PM, Jan 2")
-	for _, h := range eqResult.Holdings {
-		v.TotalCurrent += h.LastPrice * h.Quantity
-		v.TotalPnL += h.PnL
-	}
-
-	mfResult, err := s.kite.MFHoldings(ctx)
-	if err != nil {
-		return v
-	}
-	v.MFHoldings = mfResult.Holdings
-
-	// Fetch trades (non-fatal — useful for tax filing).
-	tradesResult, err := s.kite.Trades(ctx)
-	if err == nil {
-		v.Trades = tradesResult.Trades
-	}
-
-	return v
-}
-
-func (s *Server) handleKite(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	pending, _ := s.store.ListPendingReview(ctx)
-	v := s.prepareKiteView(ctx)
-
-	s.render(w, "kite", struct {
-		pageData
-		kiteView
-	}{
-		pageData: pageData{Title: "Kite", PendingCount: len(pending), ActiveBatchID: s.activeBatchID(ctx), Active: "kite"},
-		kiteView: v,
-	})
-}
+// --- Kite connect/disconnect ---
 
 func (s *Server) handleKiteConnect(w http.ResponseWriter, r *http.Request) {
 	authURL, err := s.kite.StartAuth()
@@ -1559,106 +1368,6 @@ func (s *Server) handleKiteDisconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/portfolio?toast=Disconnected&variant=info", http.StatusSeeOther)
-}
-
-func userFacingKiteError(err error) string {
-	return userFacingBrokerError("Kite", err)
-}
-
-type kiteHoldingJSON struct {
-	Symbol       string  `json:"symbol"`
-	Quantity     float64 `json:"quantity"`
-	AvgPrice     float64 `json:"avg_price"`
-	LastPrice    float64 `json:"last_price"`
-	PnL          float64 `json:"pnl"`
-	DayChangePct float64 `json:"day_change_pct"`
-}
-
-type kiteMFHoldingJSON struct {
-	SchemeName string  `json:"scheme_name"`
-	Quantity   float64 `json:"quantity"`
-	AvgPrice   float64 `json:"avg_price"`
-	LastPrice  float64 `json:"last_price"`
-	PnL        float64 `json:"pnl"`
-	Invested   float64 `json:"invested"`
-	Current    float64 `json:"current"`
-}
-
-type kiteTradeJSON struct {
-	TradeID         string  `json:"trade_id"`
-	Symbol          string  `json:"symbol"`
-	TransactionType string  `json:"transaction_type"`
-	Quantity        float64 `json:"quantity"`
-	Price           float64 `json:"price"`
-	TradeValue      float64 `json:"trade_value"`
-	FillTimestamp   string  `json:"fill_timestamp"`
-	Product         string  `json:"product"`
-}
-
-type kiteHoldingsResponse struct {
-	Connected    bool                `json:"connected"`
-	Holdings     []kiteHoldingJSON   `json:"holdings"`
-	MFHoldings   []kiteMFHoldingJSON `json:"mf_holdings"`
-	Trades       []kiteTradeJSON     `json:"trades"`
-	TotalCurrent float64             `json:"total_current"`
-	TotalPnL     float64             `json:"total_pnl"`
-	Error        string              `json:"error,omitempty"`
-	FetchedAt    string              `json:"fetched_at"`
-}
-
-func (s *Server) handleKiteHoldingsAPI(w http.ResponseWriter, r *http.Request) {
-	v := s.prepareKiteView(r.Context())
-
-	holdings := make([]kiteHoldingJSON, 0, len(v.Holdings))
-	for _, h := range v.Holdings {
-		holdings = append(holdings, kiteHoldingJSON{
-			Symbol:       h.TradingSymbol,
-			Quantity:     h.Quantity,
-			AvgPrice:     h.AveragePrice,
-			LastPrice:    h.LastPrice,
-			PnL:          h.PnL,
-			DayChangePct: h.DayChangePct,
-		})
-	}
-
-	mfHoldings := make([]kiteMFHoldingJSON, 0, len(v.MFHoldings))
-	for _, h := range v.MFHoldings {
-		mfHoldings = append(mfHoldings, kiteMFHoldingJSON{
-			SchemeName: h.SchemeName,
-			Quantity:   h.Quantity,
-			AvgPrice:   h.AveragePrice,
-			LastPrice:  h.LastPrice,
-			PnL:        h.PnL,
-			Invested:   h.InvestedValue,
-			Current:    h.CurrentValue,
-		})
-	}
-
-	trades := make([]kiteTradeJSON, 0, len(v.Trades))
-	for _, t := range v.Trades {
-		trades = append(trades, kiteTradeJSON{
-			TradeID:         t.TradeID,
-			Symbol:          t.TradingSymbol,
-			TransactionType: t.TransactionType,
-			Quantity:        t.Quantity,
-			Price:           t.Price,
-			TradeValue:      t.TradeValue,
-			FillTimestamp:   t.FillTimestamp,
-			Product:         t.Product,
-		})
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(kiteHoldingsResponse{
-		Connected:    v.Connected,
-		Holdings:     holdings,
-		MFHoldings:   mfHoldings,
-		Trades:       trades,
-		TotalCurrent: v.TotalCurrent,
-		TotalPnL:     v.TotalPnL,
-		Error:        v.Error,
-		FetchedAt:    v.FetchedAt,
-	})
 }
 
 // --- helpers ---

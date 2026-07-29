@@ -1676,10 +1676,10 @@ func TestNav_UploadInRail(t *testing.T) {
 	}
 }
 
-func TestGroww_NotConnected_ShowsEmptyState(t *testing.T) {
+func TestPortfolio_NotConnected_ShowsEmptyState(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	rec, _ := doGet(srv, "/groww")
+	rec, _ := doGet(srv, "/portfolio")
 	if rec.Code != 200 {
 		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -1687,44 +1687,33 @@ func TestGroww_NotConnected_ShowsEmptyState(t *testing.T) {
 	if !strings.Contains(body, `class="empty"`) {
 		t.Errorf("not-connected state should use .empty pattern; got: %s", body[:min(400, len(body))])
 	}
-	if !strings.Contains(body, "Connect your Groww account") {
+	if !strings.Contains(body, "Connect your broker accounts") {
 		t.Errorf("missing connect CTA heading")
 	}
 	if !strings.Contains(body, `href="/groww/connect"`) {
-		t.Errorf("missing connect link")
+		t.Errorf("missing Groww connect link")
+	}
+	if !strings.Contains(body, `href="/kite/connect"`) {
+		t.Errorf("missing Kite connect link")
 	}
 }
 
-func TestGroww_NotConnected_NoImplementationJargon(t *testing.T) {
+func TestPortfolio_GrowwSessionExpired_ShowsReconnect(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	rec, _ := doGet(srv, "/groww")
-	body := rec.Body.String()
-	if strings.Contains(body, "MCP") {
-		t.Errorf("connect copy should not mention MCP (implementation detail); got: %s", body[:min(400, len(body))])
-	}
-	if strings.Contains(body, "Claude") || strings.Contains(body, "Cursor") {
-		t.Errorf("connect copy should not mention other AI tools; got: %s", body[:min(400, len(body))])
-	}
-}
-
-func TestGroww_SessionExpired_ShowsReconnect(t *testing.T) {
-	srv, cleanup := newTestServer(t)
-	defer cleanup()
-	// Save an expired token so HasExpiredToken returns true.
 	if err := srv.groww.SaveExpiredTokenForTest(); err != nil {
 		t.Fatalf("SaveExpiredTokenForTest: %v", err)
 	}
-	rec, _ := doGet(srv, "/groww")
+	rec, _ := doGet(srv, "/portfolio")
 	if rec.Code != 200 {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	body := rec.Body.String()
 	if !strings.Contains(body, "Session expired") {
-		t.Errorf("expired session should show 'Session expired' heading; got: %s", body[:min(400, len(body))])
+		t.Errorf("expired session should show 'Session expired' in status strip; got: %s", body[:min(400, len(body))])
 	}
 	if !strings.Contains(body, "Reconnect") {
-		t.Errorf("expired session should show Reconnect button")
+		t.Errorf("expired session should show Reconnect link")
 	}
 }
 
