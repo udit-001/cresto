@@ -393,7 +393,7 @@ type Server struct {
 // New wires the server's dependencies but does not start listening. The caller
 // owns the store, LLMClient, and pdfs lifetimes; closing them is the caller's job.
 func New(s *store.Store, client LLMClient, cfg config.Config, pdfs *pdfstore.Store, growwClient *groww.Client, kiteClient *kite.Client) (*Server, error) {
-	pageNames := []string{"dashboard", "upload", "batch_progress", "payslip_detail", "payslips_list", "component_detail", "annual", "error", "portfolio"}
+	pageNames := []string{"dashboard", "upload", "batch_progress", "payslip_detail", "payslips_list", "component_detail", "annual", "error", "portfolio", "settings"}
 	pages := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {
 		t, err := template.New("").Funcs(tmplFuncs).ParseFS(contentFS,
@@ -492,6 +492,9 @@ func (s *Server) Routes() *http.ServeMux {
 	// the separate /groww and /kite pages.
 	mux.HandleFunc("GET /portfolio", s.handlePortfolio)
 	mux.HandleFunc("GET /api/portfolio/holdings", s.handlePortfolioHoldingsAPI)
+
+	// Settings: broker + LLM connection management (PF-64).
+	mux.HandleFunc("GET /settings", s.handleSettings)
 
 	// Static assets: CSS, JS. fs.Sub scopes the embed to /static.
 	staticFS, err := fs.Sub(contentFS, "static")

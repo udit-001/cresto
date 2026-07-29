@@ -1,48 +1,7 @@
 {{define "page"}}
 <div class="space-y-6">
-  <!-- Broker status strip: always visible. Compact row showing both brokers
-       with their connection state and connect/disconnect actions. -->
-  <div class="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3" id="broker-strip">
-    <!-- Groww -->
-    <div class="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm" id="groww-status-pill"
-         {{if .Groww.Connected}}data-state="connected"{{else if .Groww.Expired}}data-state="expired"{{else}}data-state="disconnected"{{end}}>
-      {{if .Groww.Connected}}
-      <svg class="text-success" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      <span class="font-medium">Groww</span>
-      <span class="text-muted-foreground">Connected</span>
-      <button type="button" class="text-muted-foreground hover:text-destructive underline-offset-2 hover:underline text-xs" onclick="document.getElementById('groww-disconnect-dialog').showModal()">Disconnect</button>
-      {{else if .Groww.Expired}}
-      <svg class="text-warning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
-      <span class="font-medium">Groww</span>
-      <span class="text-warning">Session expired</span>
-      <a href="/groww/connect" class="text-primary underline-offset-2 hover:underline text-xs">Reconnect</a>
-      {{else}}
-      <svg class="text-muted-foreground" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
-      <span class="font-medium">Groww</span>
-      <span class="text-muted-foreground">Not connected</span>
-      <a href="/groww/connect" class="text-primary underline-offset-2 hover:underline text-xs">Connect</a>
-      {{end}}
-    </div>
-
-    <!-- Kite -->
-    <div class="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm" id="kite-status-pill"
-         {{if .Kite.Connected}}data-state="connected"{{else}}data-state="disconnected"{{end}}>
-      {{if .Kite.Connected}}
-      <svg class="text-success" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      <span class="font-medium">Kite</span>
-      <span class="text-muted-foreground">Connected</span>
-      <button type="button" class="text-muted-foreground hover:text-destructive underline-offset-2 hover:underline text-xs" onclick="document.getElementById('kite-disconnect-dialog').showModal()">Disconnect</button>
-      {{else}}
-      <svg class="text-muted-foreground" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
-      <span class="font-medium">Kite</span>
-      <span class="text-muted-foreground">Not connected</span>
-      <a href="/kite/connect" class="text-primary underline-offset-2 hover:underline text-xs">Connect</a>
-      {{end}}
-    </div>
-  </div>
-
   {{if not .AnyConnected}}
-  <!-- 0 brokers connected: full-page empty state with both connect buttons -->
+  <!-- 0 brokers connected: full-page empty state -->
   <section class="empty">
     <header>
       <figure>
@@ -52,12 +11,18 @@
       <p>View all your stock holdings in one place. Cresto stores only the access token or session ID — your credentials stay with your broker.</p>
     </header>
     <footer class="flex gap-2">
-      <a href="/groww/connect" class="btn">Connect Groww</a>
-      <a href="/kite/connect" class="btn" data-variant="outline">Connect Kite</a>
+      <a href="/settings" class="btn">Go to Settings</a>
     </footer>
   </section>
 
   {{else}}
+  <!-- Broker alerts (only when a session expired — needs action) -->
+  {{if and (not .Groww.Connected) .Groww.Expired}}
+  <div class="alert" data-variant="warning">
+    <section>Groww session expired. <a href="/groww/connect" class="underline">Reconnect</a></section>
+  </div>
+  {{end}}
+
   <!-- Holdings section -->
   <div class="flex items-center justify-between gap-4">
     <div>
@@ -220,33 +185,6 @@
   </div>
   {{end}}
   </div>
-
-  <!-- Disconnect confirmation dialogs -->
-  <dialog class="alert-dialog" id="groww-disconnect-dialog" aria-labelledby="groww-disconnect-title" aria-describedby="groww-disconnect-desc">
-    <div>
-      <header>
-        <h2 id="groww-disconnect-title">Disconnect from Groww?</h2>
-        <p id="groww-disconnect-desc">Cresto will forget your Groww access token. You can reconnect anytime.</p>
-      </header>
-      <footer>
-        <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
-        <a href="/groww/disconnect" class="btn" data-variant="destructive">Disconnect</a>
-      </footer>
-    </div>
-  </dialog>
-
-  <dialog class="alert-dialog" id="kite-disconnect-dialog" aria-labelledby="kite-disconnect-title" aria-describedby="kite-disconnect-desc">
-    <div>
-      <header>
-        <h2 id="kite-disconnect-title">Disconnect from Zerodha?</h2>
-        <p id="kite-disconnect-desc">Cresto will forget your Kite session. You can reconnect anytime.</p>
-      </header>
-      <footer>
-        <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
-        <a href="/kite/disconnect" class="btn" data-variant="destructive">Disconnect</a>
-      </footer>
-    </div>
-  </dialog>
 
   <script>
   (() => {
@@ -451,36 +389,24 @@
       </div>`;
     }
 
-    // --- Update broker status strip ---
-    function updateBrokerStrip(data) {
-      const gwPill = document.getElementById('groww-status-pill');
-      const ktPill = document.getElementById('kite-status-pill');
-
-      if (gwPill) {
-        const wasConnected = gwPill.dataset.state === 'connected';
-        if (!data.groww_connected) {
-          if (wasConnected) showToast('warning', 'Groww session expired');
-          gwPill.dataset.state = data.groww_expired ? 'expired' : 'disconnected';
-          gwPill.innerHTML = data.groww_expired
-            ? '<svg class="text-warning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg><span class="font-medium">Groww</span><span class="text-warning">Session expired</span><a href="/groww/connect" class="text-primary underline-offset-2 hover:underline text-xs">Reconnect</a>'
-            : '<svg class="text-muted-foreground" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg><span class="font-medium">Groww</span><span class="text-muted-foreground">Not connected</span><a href="/groww/connect" class="text-primary underline-offset-2 hover:underline text-xs">Connect</a>';
-          const gwChip = document.querySelector('[data-filter="groww"]');
-          if (gwChip) { gwChip.disabled = true; gwChip.classList.add('opacity-40', 'cursor-not-allowed'); }
-        }
+    // --- Handle broker state changes on refresh ---
+    function handleBrokerStateChange(data) {
+      // If Groww was connected but now expired, toast + disable chip.
+      const gwChip = document.querySelector('[data-filter="groww"]');
+      if (gwChip && !data.groww_connected && !gwChip.disabled) {
+        if (data.groww_expired) showToast('warning', 'Groww session expired');
+        gwChip.disabled = true;
+        gwChip.classList.add('opacity-40', 'cursor-not-allowed');
+        if (activeFilter === 'groww') document.querySelector('[data-filter="all"]').click();
       }
 
-      if (ktPill) {
-        const wasConnected = ktPill.dataset.state === 'connected';
-        if (!data.kite_connected) {
-          if (wasConnected) showToast('warning', 'Kite session expired');
-          ktPill.dataset.state = 'disconnected';
-          ktPill.innerHTML = '<svg class="text-muted-foreground" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg><span class="font-medium">Kite</span><span class="text-muted-foreground">Not connected</span><a href="/kite/connect" class="text-primary underline-offset-2 hover:underline text-xs">Connect</a>';
-          const ktChip = document.querySelector('[data-filter="kite"]');
-          if (ktChip) { ktChip.disabled = true; ktChip.classList.add('opacity-40', 'cursor-not-allowed'); }
-          if (activeFilter === 'kite') {
-            document.querySelector('[data-filter="all"]').click();
-          }
-        }
+      // If Kite was connected but now disconnected, toast + disable chip.
+      const ktChip = document.querySelector('[data-filter="kite"]');
+      if (ktChip && !data.kite_connected && !ktChip.disabled) {
+        showToast('warning', 'Kite session expired');
+        ktChip.disabled = true;
+        ktChip.classList.add('opacity-40', 'cursor-not-allowed');
+        if (activeFilter === 'kite') document.querySelector('[data-filter="all"]').click();
       }
     }
 
@@ -498,7 +424,7 @@
           if (!res.ok) throw new Error('Server returned ' + res.status);
           const data = await res.json();
 
-          updateBrokerStrip(data);
+          handleBrokerStateChange(data);
           renderHoldings(data);
           renderMFHoldings(data);
           renderTrades(data);

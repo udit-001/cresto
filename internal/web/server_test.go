@@ -1690,27 +1690,24 @@ func TestPortfolio_NotConnected_ShowsEmptyState(t *testing.T) {
 	if !strings.Contains(body, "Connect your broker accounts") {
 		t.Errorf("missing connect CTA heading")
 	}
-	if !strings.Contains(body, `href="/groww/connect"`) {
-		t.Errorf("missing Groww connect link")
-	}
-	if !strings.Contains(body, `href="/kite/connect"`) {
-		t.Errorf("missing Kite connect link")
+	if !strings.Contains(body, `href="/settings"`) {
+		t.Errorf("missing link to settings page")
 	}
 }
 
-func TestPortfolio_GrowwSessionExpired_ShowsReconnect(t *testing.T) {
+func TestSettings_GrowwSessionExpired_ShowsReconnect(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
 	if err := srv.groww.SaveExpiredTokenForTest(); err != nil {
 		t.Fatalf("SaveExpiredTokenForTest: %v", err)
 	}
-	rec, _ := doGet(srv, "/portfolio")
+	rec, _ := doGet(srv, "/settings")
 	if rec.Code != 200 {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	body := rec.Body.String()
 	if !strings.Contains(body, "Session expired") {
-		t.Errorf("expired session should show 'Session expired' in status strip; got: %s", body[:min(400, len(body))])
+		t.Errorf("expired session should show 'Session expired' on settings page; got: %s", body[:min(400, len(body))])
 	}
 	if !strings.Contains(body, "Reconnect") {
 		t.Errorf("expired session should show Reconnect link")
