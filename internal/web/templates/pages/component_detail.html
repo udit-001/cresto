@@ -1,0 +1,203 @@
+{{define "page"}}
+<div class="mb-6 flex items-center gap-2">
+  <span class="badge" data-variant="outline">{{.Canonical.Category}}</span>
+  {{if .Canonical.IsUserCreated}}<span class="text-xs text-muted-foreground">user-created</span>{{else}}<span class="text-xs text-muted-foreground">seed canonical</span>{{end}}
+</div>
+
+{{if .Headline.HasPoints}}
+  <div class="grid gap-4 md:grid-cols-3 mb-6">
+    <div class="card" data-size="sm">
+      <header><h2>Latest</h2></header>
+      <section>
+        <div class="text-3xl font-semibold tracking-tight numeric">&#8377;{{money .Headline.LatestAmt}}</div>
+        <div class="text-sm text-muted-foreground mt-1">{{.Headline.LatestAt}}</div>
+      </section>
+    </div>
+    <div class="card" data-size="sm">
+      <header><h2>Range</h2></header>
+      <section>
+        <div class="text-lg font-semibold tracking-tight">{{.Headline.FirstAt}}</div>
+        <div class="text-sm text-muted-foreground mt-1">first → {{.Headline.LatestAt}}</div>
+      </section>
+    </div>
+    <div class="card" data-size="sm">
+      <header><h2>Data points</h2></header>
+      <section>
+        <div class="text-3xl font-semibold tracking-tight numeric">{{.Headline.Count}}</div>
+        <div class="text-sm text-muted-foreground mt-1">confirmed months</div>
+      </section>
+    </div>
+  </div>
+
+  <div class="card mb-6">
+    <header class="flex items-center justify-between gap-4">
+      <h2 id="chart-title" class="m-0">Amount over time</h2>
+      <label class="inline-flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none" for="ytd-toggle">
+        <input type="checkbox" id="ytd-toggle" autocomplete="off">
+        <span>YTD cumulative</span>
+      </label>
+    </header>
+    <section>
+      <div class="h-[320px]">
+        <canvas id="component-chart" aria-label="{{.Canonical.Name}} over time"></canvas>
+      </div>
+    </section>
+  </div>
+{{else}}
+  <section class="empty">
+    <header>
+      <figure>
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 4-4 4 4 5-5"/></svg>
+      </figure>
+      <h3>No data yet</h3>
+      <p>This component hasn't been mapped in any confirmed payslip.</p>
+    </header>
+  </section>
+{{end}}
+
+{{if .Headline.HasPoints}}
+  <div class="card">
+    <header>
+      <h2>Monthly contributions</h2>
+      <p class="text-muted-foreground">Each month this component appeared on a confirmed payslip. Click a row to open the payslip.</p>
+    </header>
+    <section>
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th class="text-right">Amount</th>
+              <th class="text-right">YTD</th>
+              <th class="text-right text-muted-foreground">Raw label</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {{$reversed := reversePoints .Points}}
+            {{range $reversed}}
+              <tr onclick="window.location='/payslip/{{.PayslipID}}'" class="cursor-pointer">
+                <td class="font-medium">{{periodLabel .PayPeriodMonth .PayPeriodYear}}</td>
+                <td class="text-right numeric">&#8377;{{money .Amount}}</td>
+                <td class="text-right numeric text-muted-foreground">&#8377;{{money .YTDAmt}}</td>
+                <td class="text-right text-muted-foreground text-sm">{{.RawLabel}}</td>
+                <td class="text-right text-muted-foreground text-sm">View →</td>
+              </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+{{end}}
+
+{{if .Headline.HasPoints}}
+  <script src="/static/chart.umd.min.js"></script>
+  <script src="/static/chart.min.js" defer></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const points = {{json .Points}};
+      // Both series come from the same embedded points; the toggle swaps
+      // which one the chart draws, no server round-trip.
+      const rows = points.map(p => ({
+        label: new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(new Date(p.PayPeriodYear, p.PayPeriodMonth - 1)),
+        amount: p.Amount,
+        ytd: p.YTDAmt
+      }));
+
+      const cssVar = (name, fallback) => {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return v || fallback;
+      };
+      const lineColor = cssVar("--chart-2", "#3b82f6");
+      const accent = cssVar("--chart-accent", "#dc2626");
+
+      // After-render plugin: repaint the latest point with the chart accent
+      // and stamp its value above it, so the eye lands on the most recent
+      // observation without axis triangulation.
+      const latestPointPlugin = {
+        id: "componentLatestPointAccent",
+        afterDatasetsDraw(chart) {
+          const meta = chart.getDatasetMeta(0);
+          if (!meta || !meta.data.length) return;
+          const point = meta.data[meta.data.length - 1];
+          if (!point) return;
+          const value = chart.data.datasets[0].data[meta.data.length - 1];
+          const ctx = chart.ctx;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = accent;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = cssVar("--background", "#ffffff");
+          ctx.stroke();
+          ctx.font = "600 12px ui-monospace, SFMono-Regular, Menlo, monospace";
+          ctx.fillStyle = accent;
+          ctx.textAlign = "center";
+          ctx.fillText("₹" + Number(value).toLocaleString("en-IN"), point.x, point.y - 14);
+          ctx.restore();
+        }
+      };
+
+      // The chart instance is returned by basecoat.chart (it stores the
+      // Chart.js instance on the canvas, so Chart.getChart can recover it).
+      let currentSeries = "amount";
+      const buildConfig = (seriesKey, label) => ({
+        type: "line",
+        labelKey: "label",
+        data: rows,
+        series: { [seriesKey]: { label, color: lineColor } },
+        keys: { value: seriesKey },
+        plugins: [latestPointPlugin],
+        options: {
+          maintainAspectRatio: false,
+          tension: 0,
+          elements: { point: { radius: 3, hoverRadius: 5 } },
+          interaction: { mode: "index", axis: "x", intersect: false },
+          scales: {
+            y: {
+              border: { display: false },
+              grid: { color: "color-mix(in oklab, var(--color-border) 50%, transparent)", lineWidth: 1 },
+              ticks: {
+                color: "var(--color-muted-foreground)",
+                callback: (v) => "₹" + Number(v).toLocaleString("en-IN")
+              }
+            },
+            x: { grid: { display: false }, ticks: { color: "var(--color-muted-foreground)", maxRotation: 0 } }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (c) => " ₹" + c.parsed.y.toLocaleString("en-IN") } }
+          }
+        }
+      });
+
+      // First render: monthly amount.
+      window.basecoat.chart("#component-chart", buildConfig("amount", "{{.Canonical.DisplayName}}"));
+
+      // Toggle: destroy + rebuild with the other series. Chart.js supports
+      // mutating dataset.data in place, but rebuilding keeps the code simple
+      // and the chart count low (we always have exactly one instance).
+      const toggle = document.getElementById("ytd-toggle");
+      const title = document.getElementById("chart-title");
+      if (toggle) {
+        toggle.addEventListener("change", () => {
+          const canvas = document.getElementById("component-chart");
+          const existing = Chart.getChart(canvas);
+          if (existing) existing.destroy();
+          if (toggle.checked) {
+            currentSeries = "ytd";
+            title.textContent = "YTD cumulative";
+            window.basecoat.chart("#component-chart", buildConfig("ytd", "{{.Canonical.DisplayName}} (YTD)"));
+          } else {
+            currentSeries = "amount";
+            title.textContent = "Amount over time";
+            window.basecoat.chart("#component-chart", buildConfig("amount", "{{.Canonical.DisplayName}}"));
+          }
+        });
+      }
+    });
+  </script>
+{{end}}
+{{end}}

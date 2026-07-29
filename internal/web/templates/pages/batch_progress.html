@@ -1,0 +1,136 @@
+{{define "page"}}
+<div class="card mb-6">
+  <section>
+    <div class="flex items-baseline justify-between gap-4 mb-2">
+      <span class="font-medium text-lg tabular-nums" id="batch-label">{{.Attempted}} of {{.Batch.Total}} done</span>
+      <span class="text-muted-foreground text-sm tabular-nums" id="batch-counts" {{if eq .Batch.FailedCount 0}}hidden{{end}}>{{.Batch.FailedCount}} failed</span>
+    </div>
+    <div class="progress" role="progressbar" aria-label="Batch processing progress" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100" id="batch-progress-bar">
+      <span class="transition-[width] duration-[400ms] ease-[cubic-bezier(0.32,0.72,0,1)]" style="width: {{.Pct}}%" id="batch-pct"></span>
+    </div>
+  </section>
+  {{if not .Done}}
+  <footer class="text-muted-foreground text-sm mt-3" id="batch-footer">
+    <span id="current-file-indicator" class="flex items-center gap-1.5">
+      <span class="inline-block w-3 h-3 rounded-full bg-primary animate-pulse"></span>
+      <span id="current-file-name">{{if .Batch.CurrentFile}}Processing {{.Batch.CurrentFile}}&hellip;{{else}}Each payslip takes about 15 seconds to process.{{end}}</span>
+    </span>
+  </footer>
+  {{end}}
+</div>
+
+<div class="card" id="batch-payslips-card" {{if not .Payslips}}hidden{{end}}>
+  <header><h2>Payslips in this batch</h2></header>
+  <section>
+    <div class="table-container">
+      <table class="table" id="batch-payslips-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Employer</th>
+            <th>Pay period</th>
+            <th class="text-right">Net pay</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="batch-payslips-body">
+          {{range .Payslips}}
+            <tr onclick="window.location='/payslip/{{.ID}}'" class="cursor-pointer">
+              <td class="text-muted-foreground">{{.ID}}</td>
+              <td class="font-medium sensitive">{{.EmployerName}}</td>
+              <td>{{periodLabel .PayPeriodMonth .PayPeriodYear}}</td>
+              <td class="text-right font-mono">{{if .NetPay}}&#8377;{{money .NetPay}}{{else}}&mdash;{{end}}</td>
+              <td>
+                {{if eq .Status "confirmed"}}<span class="badge bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300">Confirmed</span>
+                {{else if eq .Status "failed"}}<span class="badge bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300">Failed</span>
+                {{else if eq .Status "processing"}}<span class="badge bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">Processing</span>
+                {{else}}<span class="badge bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">Pending Review</span>{{end}}
+              </td>
+              <td class="text-right text-muted-foreground text-sm">
+                {{if eq .Status "pending_review"}}Review →{{else}}View →{{end}}
+              </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="flex gap-2 mt-6">
+  {{if .Done}}
+    <a href="/payslips?status=pending_review" class="btn">Review pending</a>
+    {{if gt .Pending 0}}<a href="/upload" class="btn" data-variant="outline">Upload more</a>{{end}}
+  {{end}}
+</div>
+
+{{if not .Done}}
+<script>
+  const statusBadge = {
+    confirmed:     '<span class="badge bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300">Confirmed</span>',
+    failed:        '<span class="badge bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300">Failed</span>',
+    processing:    '<span class="badge bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">Processing</span>',
+    pending_review:'<span class="badge bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">Pending Review</span>',
+  };
+  const money = (n) => n ? '\u20B9' + Number(n).toLocaleString('en-IN') : '\u2014';
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function renderPayslips(rows) {
+    const tbody = document.getElementById('batch-payslips-body');
+    const card = document.getElementById('batch-payslips-card');
+    if (!tbody) return;
+    if (card) card.hidden = rows.length === 0;
+    tbody.innerHTML = rows.map(p => {
+      const action = p.status === 'pending_review' ? 'Review \u2192' : 'View \u2192';
+      return '<tr onclick="window.location=\'/payslip/' + p.id + '\'" class="cursor-pointer">' +
+        '<td class="text-muted-foreground">' + p.id + '</td>' +
+        '<td class="font-medium sensitive">' + esc(p.employer_name) + '</td>' +
+        '<td>' + esc(p.period_label) + '</td>' +
+        '<td class="text-right font-mono">' + money(p.net_pay) + '</td>' +
+        '<td>' + (statusBadge[p.status] || statusBadge.pending_review) + '</td>' +
+        '<td class="text-right text-muted-foreground text-sm">' + action + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  (async function poll() {
+    while (true) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const resp = await fetch('/api/batch/{{.Batch.ID}}');
+        if (!resp.ok) break;
+        const data = await resp.json();
+        const bar = document.getElementById('batch-progress-bar');
+        document.getElementById('batch-pct').style.width = data.pct + '%';
+        bar.setAttribute('aria-valuenow', data.pct);
+        document.getElementById('batch-label').textContent = (data.processed + data.failed) + ' of ' + data.total + ' done';
+        const counts = document.getElementById('batch-counts');
+        if (data.failed > 0) {
+          counts.textContent = data.failed + ' failed';
+          counts.hidden = false;
+        } else {
+          counts.hidden = true;
+        }
+        if (data.current_file) {
+          document.getElementById('current-file-name').textContent = 'Processing ' + data.current_file + '…';
+        }
+        renderPayslips(data.payslips || []);
+        if (data.done) {
+          document.getElementById('batch-footer').innerHTML = '';
+          const card = document.querySelector('.card');
+          if (card) {
+            card.style.transition = 'opacity 200ms ease-out';
+            card.style.opacity = '0.5';
+            setTimeout(() => location.reload(), 200);
+          } else {
+            location.reload();
+          }
+          break;
+        }
+      } catch (_) { break; }
+    }
+  })();
+</script>
+{{end}}
+{{end}}

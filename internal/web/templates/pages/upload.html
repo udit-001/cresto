@@ -1,0 +1,159 @@
+{{define "page"}}
+<p class="text-sm text-muted-foreground mb-6">Choose one or more PDFs. Each is rendered to an image, sent to the local LLM for structured extraction, and queued for your review. Multiple files are processed as a batch in the background.</p>
+
+<div id="llm-status" class="flex items-center gap-2 mb-4 text-sm"
+     data-base-url="{{.LLMBaseURL}}"
+     data-model-name="{{.LLMModelName}}">
+  <span class="l lm-status-dot inline-block w-2 h-2 rounded-full shrink-0"></span>
+  <span class="lm-status-text text-muted-foreground"></span>
+</div>
+
+{{if .Error}}
+  <div class="alert mb-6" data-variant="destructive">
+    <h2>Upload failed</h2>
+    <section>{{.Error}}</section>
+  </div>
+{{end}}
+
+<form method="POST" action="/upload" enctype="multipart/form-data" id="upload-form">
+  <div class="card">
+    <section>
+      <label for="pdf" class="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-10 cursor-pointer hover:bg-muted/50 transition-colors" id="dropzone">
+        <svg class="lucide lucide-upload mb-3 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span class="font-medium">Click to select payslip PDFs</span>
+      </label>
+      <input type="file" id="pdf" name="pdf" accept="application/pdf" required multiple class="hidden">
+    </section>
+    <div id="file-list" class="file-list hidden px-6 pb-2 space-y-1.5"></div>
+    <footer>
+      <button type="submit" class="btn" id="submit-btn" disabled>Upload and parse</button>
+      <span class="text-muted-foreground text-sm italic hidden" id="processing">Processing&hellip; this takes ~15 seconds per payslip with a local LLM.</span>
+    </footer>
+  </div>
+</form>
+
+<script>
+  const input = document.getElementById('pdf');
+  const fileList = document.getElementById('file-list');
+  const form = document.getElementById('upload-form');
+  const submit = document.getElementById('submit-btn');
+  const processing = document.getElementById('processing');
+  let selectedFiles = [];
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+  }
+
+  function renderFileList() {
+    if (!selectedFiles.length) {
+      fileList.classList.add('hidden');
+      fileList.innerHTML = '';
+      submit.disabled = true;
+      return;
+    }
+    fileList.classList.remove('hidden');
+    submit.disabled = false;
+    fileList.innerHTML = '<div class="text-xs font-medium text-muted-foreground mb-1.5">' + selectedFiles.length + ' file' + (selectedFiles.length > 1 ? 's' : '') + ' selected</div>' +
+      selectedFiles.map((f, i) =>
+        '<div class="flex items-center justify-between gap-2 py-1.5 px-3 rounded-md bg-muted/30 text-sm">' +
+          '<div class="flex items-center gap-2 min-w-0">' +
+            '<svg class="lucide lucide-file-text shrink-0 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>' +
+            '<span class="truncate text-sm">' + f.name + '</span>' +
+            '<span class="text-xs text-muted-foreground shrink-0">' + formatSize(f.size) + '</span>' +
+          '</div>' +
+          '<button type="button" class="text-muted-foreground hover:text-foreground shrink-0 p-0.5" data-index="' + i + '" aria-label="Remove ' + f.name + '">' +
+            '<svg class="lucide lucide-x" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+          '</button>' +
+        '</div>'
+      ).join('') + '</div>';
+  }
+
+  function syncInput() {
+    const dt = new DataTransfer();
+    selectedFiles.forEach(f => dt.items.add(f));
+    input.files = dt.files;
+  }
+
+  function removeFile(index) {
+    selectedFiles.splice(index, 1);
+    syncInput();
+    renderFileList();
+  }
+
+  fileList.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-index]');
+    if (btn) removeFile(parseInt(btn.dataset.index));
+  });
+
+  input.addEventListener('change', () => {
+    const map = new Map();
+    selectedFiles.forEach(f => map.set(f.name + f.size, f));
+    Array.from(input.files).forEach(f => map.set(f.name + f.size, f));
+    selectedFiles = Array.from(map.values());
+    syncInput();
+    renderFileList();
+  });
+
+  form.addEventListener('submit', () => {
+    submit.disabled = true;
+    submit.textContent = 'Processing…';
+    processing.classList.remove('hidden');
+  });
+
+  // LM Studio status pill. Initial state is server-rendered; this polls
+  // /api/llm/status every 10s to catch LM Studio starting/stopping while
+  // the page is open. Uploads are never gated — the pill is advisory.
+  const statusBox = document.getElementById('llm-status');
+  const statusDot = statusBox.querySelector('.lm-status-dot');
+  const statusText = statusBox.querySelector('.lm-status-text');
+  const baseURL = statusBox.dataset.baseUrl;
+  const modelName = statusBox.dataset.modelName;
+
+  const statusStyles = {
+    loaded:          { dot: 'bg-emerald-500', text: 'Model loaded and ready' },
+    not_loaded:      { dot: 'bg-amber-500',   text: 'Model "' + modelName + '" downloaded but not loaded — will load on upload' },
+    not_installed:   { dot: 'bg-amber-500',   text: 'Model "' + modelName + '" not found in LM Studio — download it first' },
+    server_down:     { dot: 'bg-red-500',     text: 'LM Studio unreachable at ' + baseURL + ' — will start on upload' },
+    server_starting: { dot: 'bg-blue-500',    text: 'Starting LM Studio server…' },
+    model_loading:   { dot: 'bg-blue-500',    text: 'Loading model "' + modelName + '" into RAM… (can take ~30s)' },
+    unloading:       { dot: 'bg-blue-500',    text: 'Unloading model to free RAM…' },
+  };
+
+  function renderStatus(state) {
+    const s = statusStyles[state] || statusStyles.server_down;
+    statusDot.className = 'lm-status-dot inline-block w-2 h-2 rounded-full shrink-0 ' + s.dot;
+    statusText.textContent = s.text;
+  }
+
+  renderStatus("{{.LLMStatus}}");
+
+  async function pollLLMStatus() {
+    try {
+      const r = await fetch('/api/llm/status', { cache: 'no-store' });
+      const data = await r.json();
+      renderStatus(data.status);
+    } catch (e) { /* network blip — leave current state */ }
+  }
+
+  // Poll faster during transitions so the user sees "starting…" / "loading…"
+  // update promptly; the request is local and cheap.
+  setInterval(pollLLMStatus, 2000);
+</script>
+
+<style>
+  /* File list entrance — animates when 'hidden' is removed. */
+  .file-list:not(.hidden) {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 160ms ease-out, transform 160ms ease-out;
+  }
+  @starting-style {
+    .file-list:not(.hidden) { opacity: 0; transform: translateY(-4px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .file-list:not(.hidden) { transition: none; }
+  }
+</style>
+{{end}}

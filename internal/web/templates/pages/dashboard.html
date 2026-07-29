@@ -1,0 +1,245 @@
+{{define "page"}}
+{{$d := .Dashboard}}
+
+{{if not $d.HasConfirmed}}
+  {{if .Pending}}
+    <section class="card">
+      <header>
+        <h2>Confirm your first payslip</h2>
+        <p>You have {{len .Pending}} waiting. Confirm one to unlock the dashboard.</p>
+      </header>
+      <section>
+        <ul class="divide-y">
+          {{range .Pending}}
+            <li>
+              <a href="/payslip/{{.ID}}" class="flex items-center justify-between py-3 hover:bg-muted/50 -mx-2 px-2 rounded">
+                <span class="font-medium sensitive">{{.EmployerName}}<span class="text-muted-foreground font-normal"> — {{periodLabel .PayPeriodMonth .PayPeriodYear}}</span></span>
+                <span class="badge" data-variant="outline">pending</span>
+              </a>
+            </li>
+          {{end}}
+        </ul>
+      </section>
+      <footer>
+        <a href="/payslips?status=pending_review" class="btn">Open review queue</a>
+      </footer>
+    </section>
+  {{else}}
+    <section class="empty">
+      <header>
+        <figure>
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="3" rx="2"/><path d="M3 14h18M9 21h12"/></svg>
+        </figure>
+        <h3>Nothing here yet</h3>
+        <p>Upload your first payslip to get started.</p>
+      </header>
+      <footer>
+        <a href="/upload" class="btn">Upload payslip</a>
+      </footer>
+    </section>
+  {{end}}
+{{else}}
+  {{if .Pending}}
+    <div class="alert mb-6">
+      <h2>{{len .Pending}} payslip{{if gt (len .Pending) 1}}s{{end}} awaiting review</h2>
+      <section>Confirm them to see the data appear on your dashboard.</section>
+      <footer><a href="/payslips?status=pending_review" class="btn" data-variant="outline" data-size="sm">Open review queue</a></footer>
+    </div>
+  {{end}}
+
+  <!-- Headline cards -->
+  <div class="grid gap-4 md:grid-cols-3 mb-6">
+    <div class="card" data-size="sm">
+      <header><h2>Latest net pay</h2></header>
+      <section>
+        <div class="text-3xl font-semibold tracking-tight numeric">&#8377;{{money $d.LatestNet}}</div>
+        <div class="text-sm text-muted-foreground mt-1">{{$d.LatestPeriod}}</div>
+        {{if $d.HasPrevious}}
+          <div class="text-base mt-2">
+            {{if $d.NetDeltaUp}}<span class="text-success">+&#8377;{{money $d.NetDelta}}</span>{{else}}<span class="text-destructive">−&#8377;{{money (abs $d.NetDelta)}}</span>{{end}}
+            <span class="text-muted-foreground text-sm">{{if $d.NetDeltaUp}}+{{else}}−{{end}}{{printf "%.1f" $d.NetDeltaPct}}% vs previous</span>
+          </div>
+        {{end}}
+      </section>
+    </div>
+
+    <div class="card" data-size="sm">
+      <header><h2>YTD {{$d.YTDYear}}</h2></header>
+      <section>
+        <div class="text-3xl font-semibold tracking-tight numeric">&#8377;{{money $d.YTDNet}}</div>
+        <div class="text-sm text-muted-foreground mt-1">total in-hand</div>
+        <div class="text-sm mt-2 text-muted-foreground">
+          Gross &#8377;{{money $d.YTDGross}} · Tax &#8377;{{money $d.YTDTax}} · PF &#8377;{{money $d.YTDPF}}
+        </div>
+      </section>
+    </div>
+
+    <div class="card" data-size="sm">
+      <header><h2>Payslips tracked</h2></header>
+      <section>
+        <div class="text-3xl font-semibold tracking-tight numeric">{{len $d.Periods}}</div>
+        <div class="text-sm text-muted-foreground mt-1">confirmed, all time</div>
+      </section>
+    </div>
+  </div>
+
+  <!-- "Why did in-hand change?" callout -->
+  {{if and $d.HasPrevious $d.ComponentDeltas}}
+    <div class="alert mb-6">
+      <h2>
+        {{if $d.NetDeltaUp}}Net went up{{else}}Net went down{{end}} by
+        <span class="numeric">{{if $d.NetDeltaUp}}+{{else}}-{{end}}&#8377;{{money (abs $d.NetDelta)}}</span>
+        <span class="text-muted-foreground font-normal">({{if $d.NetDeltaUp}}+{{end}}{{printf "%.1f" $d.NetDeltaPct}}%)</span>
+      </h2>
+      <section>
+        <ul class="grid gap-x-8 gap-y-2 sm:grid-cols-3">
+          {{range $c := $d.ComponentDeltas}}
+            <li class="flex items-center justify-between gap-2 py-1">
+              <span class="text-sm">
+                <a href="/component/{{$c.CanonicalID}}" class="hover:underline font-medium">{{$c.Name}}</a>
+              </span>
+              <span class="text-sm font-semibold numeric {{if $c.DeltaUp}}text-success{{else}}text-destructive{{end}}">
+                {{if $c.DeltaUp}}+{{else}}−{{end}}&#8377;{{money (abs $c.Delta)}}
+              </span>
+            </li>
+          {{end}}
+          {{if gt $d.ComponentDeltasMore 0}}
+            <li class="flex items-center py-1 sm:col-span-3">
+              <a href="#components" class="text-sm text-muted-foreground hover:text-foreground">
+                and {{$d.ComponentDeltasMore}} more &darr;
+              </a>
+            </li>
+          {{end}}
+        </ul>
+      </section>
+    </div>
+  {{end}}
+
+  <!-- Charts -->
+  <div class="card mb-6">
+    <header>
+      <h2>Net pay over time</h2>
+      <div class="card-action"><span class="badge" data-variant="secondary">{{len $d.NetSeries}} months</span></div>
+    </header>
+    <section>
+      <div class="h-[280px]">
+        <canvas id="net-chart" aria-label="Net pay over time"></canvas>
+      </div>
+    </section>
+  </div>
+
+  <!-- Component drill-down list -->
+  <div class="card" id="components">
+    <header>
+      <h2>Components</h2>
+      <p class="text-muted-foreground">Click any component to see its trend over time.</p>
+    </header>
+    <section>
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Category</th>
+              <th class="text-right">Latest</th>
+              <th>Trend</th>
+              <th class="text-right">Months</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range $d.DrillDown}}
+              <tr onclick="window.location='/component/{{.CanonicalID}}'" class="cursor-pointer">
+                <td class="font-medium">{{.Name}}</td>
+                <td><span class="badge {{if eq .Category "earning"}}bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300{{else}}bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300{{end}}">{{.Category}}</span></td>
+                <td class="text-right numeric">&#8377;{{money .LatestAmount}}</td>
+                <td>{{sparklineSVG .Sparkline .Anomalous}}</td>
+                <td class="text-right text-muted-foreground">{{.UseCount}}</td>
+                <td class="text-right text-muted-foreground text-sm">View →</td>
+              </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="/static/chart.umd.min.js"></script>
+  <script src="/static/chart.min.js" defer></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const periods = {{json $d.Periods}};
+      const netSeries = {{json $d.NetSeries}};
+
+      // Net pay — line chart. Tufte fixes: no smoothing (tension: 0), data
+      // dots on every observation, visible y-axis ticks (absolute values
+      // matter), accent color on the latest point with a direct value label
+      // so the eye lands on "what's happening now" without axis triangulation.
+      const cssVar = (name, fallback) => {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return v || fallback;
+      };
+      const accent = cssVar("--chart-accent", "#dc2626");
+      const lineColor = cssVar("--chart-2", "#3b82f6");
+
+      // After-render plugin: repaint the latest point with the accent color
+      // and stamp its value above it. Chart.js draws all points uniformly
+      // first; this hook overlays one focal mark per redraw.
+      const latestPointPlugin = {
+        id: "latestPointAccent",
+        afterDatasetsDraw(chart) {
+          const meta = chart.getDatasetMeta(0);
+          if (!meta || !meta.data.length) return;
+          const point = meta.data[meta.data.length - 1];
+          if (!point) return;
+          const value = chart.data.datasets[0].data[meta.data.length - 1];
+          const ctx = chart.ctx;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = accent;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = cssVar("--background", "#ffffff");
+          ctx.stroke();
+          ctx.font = "600 12px ui-monospace, SFMono-Regular, Menlo, monospace";
+          ctx.fillStyle = accent;
+          ctx.textAlign = "center";
+          ctx.fillText("₹" + Number(value).toLocaleString("en-IN"), point.x, point.y - 14);
+          ctx.restore();
+        }
+      };
+
+      const netRows = periods.map((p, i) => ({ label: p, net: netSeries[i] }));
+      window.basecoat.chart("#net-chart", {
+        type: "line",
+        labelKey: "label",
+        data: netRows,
+        series: { net: { label: "Net pay", color: lineColor } },
+        plugins: [latestPointPlugin],
+        options: {
+          maintainAspectRatio: false,
+          tension: 0,
+          elements: { point: { radius: 3, hoverRadius: 5 } },
+          interaction: { mode: "index", axis: "x", intersect: false },
+          scales: {
+            y: {
+              border: { display: false },
+              grid: { color: "color-mix(in oklab, var(--color-border) 50%, transparent)", lineWidth: 1 },
+              ticks: {
+                color: "var(--color-muted-foreground)",
+                callback: (v) => "₹" + Number(v).toLocaleString("en-IN")
+              }
+            },
+            x: { grid: { display: false }, ticks: { color: "var(--color-muted-foreground)", maxRotation: 0 } }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (c) => " ₹" + c.parsed.y.toLocaleString("en-IN") } }
+          }
+        }
+      });
+    });
+  </script>
+{{end}}
+{{end}}

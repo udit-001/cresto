@@ -1,0 +1,32 @@
+.lific.json
+
+# Playwright/MCP browser test artifacts
+.playwright-mcp/
+
+# Development screenshots
+*.png
+*.jpg
+*.jpeg
+
+# Sample/temp data files
+payslip-*.pdf
+payslip_*.txt
+payslips-filter-badges
+
+# Tailwind CSS standalone binary (downloaded via `go run . tailwind download`)
+.bin/
+
+# Compiled CSS — regenerated from web/input.css via `go run . tailwind build`.
+# Committed so `go build` works without the Tailwind CLI present; the rule
+# below keeps local rebuilds from creating noisy diffs in other CSS files.
+internal/web/static/app.css
+
+# Local SQLite database + uploaded PDFs (created at runtime by `serve`)
+*.db
+*.db-shm
+*.db-wal
+data/
+payslips/
+
+# Build artifacts
+/bin/

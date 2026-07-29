@@ -1,0 +1,211 @@
+{{define "page"}}
+{{$a := .Annual}}
+
+<!-- FY header with prev/next nav -->
+<div class="card mb-6">
+  <header>
+    <h2 class="text-xl font-semibold tracking-tight">{{$a.FYLabel}}</h2>
+    <p class="text-muted-foreground">{{$a.FYPayslipCount}} confirmed payslip{{if eq $a.FYPayslipCount 1}}{{else}}s{{end}} in this FY · {{$a.FYDistinctMonthCount}} distinct month{{if eq $a.FYDistinctMonthCount 1}}{{else}}s{{end}}</p>
+  </header>
+  <footer class="flex items-center justify-between">
+    {{if $a.HasPrevFY}}
+      <a href="/annual?fy={{dec $a.FYStartYear}}" class="btn" data-variant="outline" data-size="sm">&larr; Previous FY</a>
+    {{else}}
+      <span class="btn opacity-50 pointer-events-none" data-variant="ghost" data-size="sm" aria-disabled="true">&larr; Previous FY</span>
+    {{end}}
+    <a href="/annual" class="text-sm text-muted-foreground hover:text-foreground">Current FY</a>
+    {{if $a.HasNextFY}}
+      <a href="/annual?fy={{inc $a.FYStartYear}}" class="btn" data-variant="outline" data-size="sm">Next FY &rarr;</a>
+    {{else}}
+      <span class="btn opacity-50 pointer-events-none" data-variant="ghost" data-size="sm" aria-disabled="true">Next FY &rarr;</span>
+    {{end}}
+  </footer>
+</div>
+
+<!-- YTD cumulative lines -->
+<section class="card mb-6">
+  <header>
+    <h2>YTD cumulative</h2>
+    <p class="text-muted-foreground">Net, tax, and PF accumulated month-by-month across this FY.</p>
+  </header>
+  <section>
+    {{if $a.YTDCumulativeOK}}
+      <div class="h-[280px]">
+        <canvas id="ytd-cumulative-chart" aria-label="YTD cumulative across this financial year"></canvas>
+      </div>
+    {{else}}
+      <div class="rounded-md border border-dashed p-6 text-center">
+        <p class="text-sm text-muted-foreground">Needs ≥2 confirmed payslips in this FY.</p>
+        <p class="text-xs text-muted-foreground mt-1">Currently {{$a.FYDistinctMonthCount}} of 2.</p>
+      </div>
+    {{end}}
+  </section>
+</section>
+
+<!-- YoY slopegraph -->
+<section class="card mb-6">
+  <header>
+    <h2>Year-over-year</h2>
+    <p class="text-muted-foreground">Latest month's components vs the same month in the previous FY.</p>
+  </header>
+  <section>
+    {{if $a.YoYOK}}
+      {{yoySlopegraphSVG $a.YoYSlopegraph}}
+    {{else}}
+      <div class="rounded-md border border-dashed p-6 text-center">
+        <p class="text-sm text-muted-foreground">Needs a matching payslip from the previous FY for this month.</p>
+        <p class="text-xs text-muted-foreground mt-1">Upload an older payslip for the same calendar month to enable this comparison.</p>
+      </div>
+    {{end}}
+  </section>
+</section>
+
+<!-- Annual summary table -->
+<section class="card">
+  <header>
+    <h2>Annual summary</h2>
+    <p class="text-muted-foreground">Per-component totals for this FY, useful for tax filing.</p>
+  </header>
+  <section>
+    {{if $a.AnnualSummaryOK}}
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th class="text-right">FY total</th>
+              <th>Trend</th>
+              <th class="text-right">vs prev FY</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range $a.AnnualSummary.Rows}}
+              <tr>
+                <td class="font-medium">
+                  {{.Name}}
+                  <span class="text-xs text-muted-foreground ml-1">{{.Category}}</span>
+                </td>
+                <td class="text-right numeric">&#8377;{{money .FYTotal}}</td>
+                <td>{{sparklineSVG .Sparkline false}}</td>
+                <td class="text-right numeric">
+                  {{if .HasPrevFY}}
+                    <span class="{{if .DeltaUp}}text-success{{else}}text-destructive{{end}}">
+                      {{if .DeltaUp}}+{{end}}&#8377;{{money (abs .Delta)}}
+                    </span>
+                  {{else}}
+                    <span class="text-muted-foreground">&mdash;</span>
+                  {{end}}
+                </td>
+              </tr>
+            {{end}}
+          </tbody>
+          <tfoot>
+            <tr class="font-semibold">
+              <td>Gross</td>
+              <td class="text-right numeric">&#8377;{{money $a.AnnualSummary.Footer.Gross}}</td>
+              <td></td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="text-muted-foreground">Deductions</td>
+              <td class="text-right numeric text-muted-foreground">&#8377;{{money $a.AnnualSummary.Footer.Deductions}}</td>
+              <td></td>
+              <td></td>
+            </tr>
+            <tr class="font-semibold">
+              <td>Net</td>
+              <td class="text-right numeric">&#8377;{{money $a.AnnualSummary.Footer.Net}}</td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    {{else}}
+      <div class="rounded-md border border-dashed p-6 text-center">
+        <p class="text-sm text-muted-foreground">Needs ≥1 confirmed payslip in this FY.</p>
+      </div>
+    {{end}}
+  </section>
+</section>
+
+{{if $a.YTDCumulativeOK}}
+  <script src="/static/chart.umd.min.js"></script>
+  <script src="/static/chart.min.js" defer></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const labels = {{json $a.YTDCumulative.Labels}};
+      const net = {{json $a.YTDCumulative.NetSeries}};
+      const tax = {{json $a.YTDCumulative.TaxSeries}};
+      const pf = {{json $a.YTDCumulative.PFSeries}};
+      const rows = labels.map((l, i) => ({ label: l, net: net[i], tax: tax[i], pf: pf[i] }));
+
+      const cssVar = (name, fallback) => {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return v || fallback;
+      };
+      const accent = cssVar("--chart-accent", "#dc2626");
+
+      // Direct-label the net-pay latest point with the accent color; tax and
+      // PF stay muted so net remains the focal series on this chart.
+      const latestPointPlugin = {
+        id: "ytdCumulativeLatestAccent",
+        afterDatasetsDraw(chart) {
+          const meta = chart.getDatasetMeta(0); // net is dataset 0
+          if (!meta || !meta.data.length) return;
+          const point = meta.data[meta.data.length - 1];
+          if (!point) return;
+          const value = chart.data.datasets[0].data[meta.data.length - 1];
+          const ctx = chart.ctx;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = accent;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = cssVar("--background", "#ffffff");
+          ctx.stroke();
+          ctx.font = "600 12px ui-monospace, SFMono-Regular, Menlo, monospace";
+          ctx.fillStyle = accent;
+          ctx.textAlign = "center";
+          ctx.fillText("₹" + Number(value).toLocaleString("en-IN"), point.x, point.y - 14);
+          ctx.restore();
+        }
+      };
+
+      window.basecoat.chart("#ytd-cumulative-chart", {
+        type: "line",
+        labelKey: "label",
+        data: rows,
+        series: {
+          net: { label: "Net",   color: cssVar("--chart-2", "#3b82f6") },
+          tax: { label: "Tax",   color: cssVar("--chart-3", "#2563eb") },
+          pf:  { label: "PF",    color: cssVar("--chart-4", "#1d4ed8") }
+        },
+        plugins: [latestPointPlugin],
+        options: {
+          maintainAspectRatio: false,
+          tension: 0,
+          elements: { point: { radius: 3, hoverRadius: 5 } },
+          interaction: { mode: "index", axis: "x", intersect: false },
+          scales: {
+            y: {
+              border: { display: false },
+              grid: { color: "color-mix(in oklab, var(--color-border) 50%, transparent)", lineWidth: 1 },
+              ticks: {
+                color: "var(--color-muted-foreground)",
+                callback: (v) => "₹" + Number(v).toLocaleString("en-IN")
+              }
+            },
+            x: { grid: { display: false }, ticks: { color: "var(--color-muted-foreground)", maxRotation: 0 } }
+          },
+          plugins: {
+            legend: { display: true, labels: { color: "var(--color-muted-foreground)", boxWidth: 12, boxHeight: 12 } },
+            tooltip: { callbacks: { label: (c) => " " + c.dataset.label + " ₹" + c.parsed.y.toLocaleString("en-IN") } }
+          }
+        }
+      });
+    });
+  </script>
+{{end}}
+{{end}}

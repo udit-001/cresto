@@ -1,0 +1,256 @@
+{{define "page"}}
+{{$filter := .StatusFilter}}
+
+{{if not .CountAll}}
+  <section class="empty">
+    <header>
+      <figure>
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="3" rx="2"/><path d="M3 14h18M9 21h12"/></svg>
+      </figure>
+      <h3>No payslips yet</h3>
+      <p>Upload your first payslip to start tracking your income.</p>
+    </header>
+    <footer>
+      <a href="/upload" class="btn">Upload payslip</a>
+    </footer>
+  </section>
+{{else}}
+  <nav class="flex flex-wrap items-center gap-2 mb-6">
+    <a href="/payslips{{if .EmployerFilter}}?employer={{urlquery .EmployerFilter}}{{end}}" class="rounded-full px-2.5 py-0.5 text-xs transition-colors {{if eq $filter ""}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}">
+      All <span class="ml-1 opacity-70">({{.CountAll}})</span>
+    </a>
+    <a href="/payslips?status=pending_review{{if .EmployerFilter}}&amp;employer={{urlquery .EmployerFilter}}{{end}}" class="rounded-full px-2.5 py-0.5 text-xs transition-colors {{if eq $filter "pending_review"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}">
+      Pending <span class="ml-1 opacity-70">({{.CountPending}})</span>
+    </a>
+    <a href="/payslips?status=failed{{if .EmployerFilter}}&amp;employer={{urlquery .EmployerFilter}}{{end}}" class="rounded-full px-2.5 py-0.5 text-xs transition-colors {{if eq $filter "failed"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}">
+      Failed <span class="ml-1 opacity-70">({{.CountFailed}})</span>
+    </a>
+    {{if and (eq $filter "failed") (gt .CountFailed 0)}}
+      <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('delete-failed-dialog').showModal()">
+        Delete all failed
+      </button>
+    {{end}}
+
+    {{if .Employers}}
+    <form method="GET" action="/payslips" class="ml-auto flex items-center gap-2">
+      {{if $filter}}<input type="hidden" name="status" value="{{$filter}}">{{end}}
+      <div class="combobox" id="company-select" data-placeholder="All companies">
+        <input type="text" role="combobox" placeholder="All companies" autocomplete="off" autocorrect="off" spellcheck="false" aria-autocomplete="list" aria-expanded="false" aria-controls="company-select-listbox" class="rounded-full px-2.5 py-0.5 text-xs border border-border bg-transparent text-muted-foreground hover:text-foreground transition-colors" value="{{if .EmployerFilter}}{{.EmployerFilter}}{{end}}">
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground opacity-50 shrink-0"><path d="m6 9 6 6 6-6" /></svg>
+        <div id="company-select-popover" data-popover aria-hidden="true" data-side="bottom" data-align="end">
+          <div role="listbox" id="company-select-listbox" aria-orientation="vertical" data-empty="No companies found.">
+            <div role="option" data-value="">All companies</div>
+            {{range .Employers}}
+            <div role="option" data-value="{{.}}">{{.}}</div>
+            {{end}}
+          </div>
+        </div>
+        <input type="hidden" name="employer" value="{{.EmployerFilter}}">
+      </div>
+
+      {{if .Years}}
+      <div class="flex items-center gap-1.5">
+        <button type="button" class="btn period-preset" data-variant="{{if eq .PeriodPreset "this-fy"}}secondary{{else}}outline{{end}}" data-size="sm" data-preset="this-fy">This FY</button>
+        <button type="button" class="btn period-preset" data-variant="{{if eq .PeriodPreset "last-fy"}}secondary{{else}}outline{{end}}" data-size="sm" data-preset="last-fy">Last FY</button>
+        <button type="button" class="btn period-preset" data-variant="{{if eq .PeriodPreset "all"}}secondary{{else}}outline{{end}}" data-size="sm" data-preset="all">All time</button>
+        <span class="text-muted-foreground/20 mx-0.5" aria-hidden="true">|</span>
+        <input type="text" name="month_from" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-8 text-center tabular-nums" placeholder="MM" value="{{if .MonthFrom}}{{.MonthFrom}}{{end}}" maxlength="2" inputmode="numeric" pattern="[0-9]*">
+        <input type="text" name="year_from" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-12 text-center tabular-nums" placeholder="YYYY" value="{{if .YearFrom}}{{.YearFrom}}{{end}}" maxlength="4" inputmode="numeric" pattern="[0-9]*">
+        <span class="text-muted-foreground/30 text-xs" aria-hidden="true">–</span>
+        <input type="text" name="month_to" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-8 text-center tabular-nums" placeholder="MM" value="{{if .MonthTo}}{{.MonthTo}}{{end}}" maxlength="2" inputmode="numeric" pattern="[0-9]*">
+        <input type="text" name="year_to" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-12 text-center tabular-nums" placeholder="YYYY" value="{{if .YearTo}}{{.YearTo}}{{end}}" maxlength="4" inputmode="numeric" pattern="[0-9]*">
+      </div>
+      {{end}}
+    </form>
+    <script>
+      (() => {
+        // Filter auto-submit: combobox change, text inputs on blur, preset buttons on click
+        document.addEventListener('change', function(e) {
+          // Combobox fires change on its root with detail.value; also handle
+          // the period inputs directly.
+          var combo = e.target.closest && e.target.closest('.combobox');
+          if (combo) { combo.closest('form').submit(); return; }
+          var el = e.target.closest && e.target.closest('.period-input');
+          if (el) { el.closest('form').submit(); }
+        });
+        // Enter key in text inputs submits
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            var el = e.target.closest && e.target.closest('.period-input');
+            if (el) {
+              e.preventDefault();
+              el.closest('form').submit();
+            }
+          }
+        });
+        // Preset buttons
+        document.addEventListener('click', function(e) {
+          var preset = e.target.closest && e.target.closest('.period-preset');
+          if (!preset) return;
+          var form = preset.closest('form');
+          var f = form.querySelector('[name="month_from"]');
+          var yf = form.querySelector('[name="year_from"]');
+          var mt = form.querySelector('[name="month_to"]');
+          var yt = form.querySelector('[name="year_to"]');
+          var now = new Date();
+          var y = now.getFullYear();
+          var m = now.getMonth() + 1;
+          var fyStart = m >= 4 ? y : y - 1;
+          if (preset.dataset.preset === 'this-fy') {
+            f.value = '4'; yf.value = fyStart;
+            mt.value = '3'; yt.value = fyStart + 1;
+          } else if (preset.dataset.preset === 'last-fy') {
+            f.value = '4'; yf.value = fyStart - 1;
+            mt.value = '3'; yt.value = fyStart;
+          } else if (preset.dataset.preset === 'all') {
+            f.value = ''; yf.value = '';
+            mt.value = ''; yt.value = '';
+          }
+          form.submit();
+        });
+      })();
+    </script>
+    {{end}}
+  </nav>
+
+  <div class="flex items-center gap-2 mb-4">
+    {{if or .StatusFilter .EmployerFilter .YearFrom .YearTo .MonthFrom .MonthTo}}
+      <a href="/payslips" class="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">Clear filters</a>
+    {{end}}
+  </div>
+
+  {{if not .Payslips}}
+    <section class="empty">
+      <header>
+        <figure>
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </figure>
+        <h3>All caught up</h3>
+        <p>No payslips with status <strong>{{$filter}}</strong>. <a href="/payslips" class="underline">Clear filter</a>.</p>
+      </header>
+    </section>
+  {{else}}
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {{range .Payslips}}
+        {{$period := periodLabel .PayPeriodMonth .PayPeriodYear}}
+        <article class="card flex flex-col cursor-pointer hover:border-foreground/30 transition-colors" onclick="window.location='/payslip/{{.ID}}'">
+          <header class="flex items-start justify-between gap-2">
+            <a href="/payslip/{{.ID}}" class="font-semibold tracking-tight hover:underline" onclick="event.stopPropagation()">{{$period}}</a>
+            {{if eq .Status "confirmed"}}<span class="badge bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300">Confirmed</span>
+            {{else if eq .Status "failed"}}<span class="badge bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300">Failed</span>
+            {{else if eq .Status "processing"}}<span class="badge bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">Processing</span>
+            {{else}}<span class="badge bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">Pending Review</span>{{end}}
+          </header>
+          <section class="flex-1">
+            <div class="text-2xl font-semibold tracking-tight numeric">&#8377;{{money .NetPay}}</div>
+            <div class="text-sm text-muted-foreground mt-1 sensitive">{{.EmployerName}}</div>
+            <div class="text-xs text-muted-foreground mt-2">
+              Gross &#8377;{{money .GrossSalary}} &middot; Deduct &#8377;{{money .TotalDeductions}}
+            </div>
+          </section>
+          <footer class="flex items-center justify-between gap-2 mt-4">
+            <a href="/pdf/{{.ID}}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1" onclick="event.stopPropagation(); openPdfPreview('/pdf/{{.ID}}'); return false;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              PDF
+            </a>
+            <button type="button" class="btn" data-variant="ghost" data-size="sm" aria-label="Delete payslip for {{$period}}" onclick="event.stopPropagation(); document.getElementById('delete-dialog-{{.ID}}').showModal()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </footer>
+        </article>
+
+        <dialog class="alert-dialog" id="delete-dialog-{{.ID}}">
+          <div>
+            <header>
+              <h2>Delete payslip?</h2>
+              <p>This permanently removes the payslip for {{$period}} and its PDF. This cannot be undone.</p>
+            </header>
+            <footer>
+              <button type="button" class="btn" data-variant="outline" onclick="this.closest('.alert-dialog').close()">Cancel</button>
+              <form method="POST" action="/payslip/{{.ID}}/delete">
+                <button type="submit" class="btn" data-variant="destructive">Delete</button>
+              </form>
+            </footer>
+          </div>
+        </dialog>
+      {{end}}
+    </div>
+
+    {{if gt .TotalPages 1}}
+    <nav class="flex items-center justify-between gap-4 mt-6 text-sm">
+      <span class="text-muted-foreground">Showing {{.Page}}–{{.TotalPages}} of {{.TotalCount}}</span>
+      <div class="flex gap-2">
+        {{$q := urlquery .StatusFilter}}{{$e := urlquery .EmployerFilter}}{{$yf := .YearFrom}}{{$yt := .YearTo}}{{$mf := .MonthFrom}}{{$mt := .MonthTo}}
+        {{if gt .Page 1}}
+          <a href="/payslips?page={{dec .Page}}{{if $q}}&amp;status={{$q}}{{end}}{{if $e}}&amp;employer={{$e}}{{end}}{{if $yf}}&amp;year_from={{$yf}}{{end}}{{if $yt}}&amp;year_to={{$yt}}{{end}}{{if $mf}}&amp;month_from={{$mf}}{{end}}{{if $mt}}&amp;month_to={{$mt}}{{end}}" class="btn" data-variant="outline" data-size="sm">← Prev</a>
+        {{end}}
+        {{if lt .Page .TotalPages}}
+          <a href="/payslips?page={{inc .Page}}{{if $q}}&amp;status={{$q}}{{end}}{{if $e}}&amp;employer={{$e}}{{end}}{{if $yf}}&amp;year_from={{$yf}}{{end}}{{if $yt}}&amp;year_to={{$yt}}{{end}}{{if $mf}}&amp;month_from={{$mf}}{{end}}{{if $mt}}&amp;month_to={{$mt}}{{end}}" class="btn" data-variant="outline" data-size="sm">Next →</a>
+        {{end}}
+      </div>
+    </nav>
+    {{end}}
+<script>
+  (() => {
+    var q = location.search;
+    if (q && !q.includes('toast=')) sessionStorage.setItem('payslip-filter', q);
+  })();
+</script>
+
+{{if and (eq $filter "failed") (gt .CountFailed 0)}}
+<dialog class="alert-dialog" id="delete-failed-dialog" aria-labelledby="delete-failed-title" aria-describedby="delete-failed-desc">
+  <div>
+    <header>
+      <h2 id="delete-failed-title">Delete {{.CountFailed}} failed payslips?</h2>
+      <p id="delete-failed-desc">This permanently removes {{.CountFailed}} payslips and their PDFs. This cannot be undone.</p>
+    </header>
+    <footer>
+      <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
+      <form method="POST" action="/payslips/delete-failed">
+        <button type="submit" class="btn" data-variant="destructive">Delete {{.CountFailed}} payslips</button>
+      </form>
+    </footer>
+  </div>
+</dialog>
+{{end}}
+
+<dialog id="pdf-preview-dialog" class="dialog" aria-labelledby="pdf-preview-title">
+  <div class="flex flex-col gap-0 h-[85vh] w-[min(90vw,800px)]">
+    <header class="flex flex-row items-center justify-between gap-4 pb-1">
+      <h2 id="pdf-preview-title" class="text-sm font-semibold m-0">PDF preview</h2>
+      <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close preview" onclick="this.closest('dialog').close()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </header>
+    <section class="flex-1 overflow-hidden">
+      <div class="pdf-spoiler relative w-full h-full">
+        <embed id="pdf-preview-embed" type="application/pdf" class="w-full h-full border-0 rounded" tabindex="-1" onfocus="this.blur()">
+        <button type="button" class="pdf-spoiler-overlay absolute inset-0 flex items-center justify-center bg-muted/80 backdrop-blur-sm rounded cursor-pointer" aria-label="Reveal PDF">
+          <span class="flex flex-col items-center gap-2 text-muted-foreground">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span class="text-sm font-medium">Click to reveal PDF</span>
+          </span>
+        </button>
+      </div>
+    </section>
+  </div>
+</dialog>
+
+<script>
+  function openPdfPreview(url) {
+    const dlg = document.getElementById('pdf-preview-dialog');
+    const embed = document.getElementById('pdf-preview-embed');
+    if (!dlg || !embed) return;
+    embed.src = url + '#pagemode=none';
+    dlg.showModal();
+  }
+  // Clear the embed src when the dialog closes so the PDF isn't kept in memory.
+  // Also reset the spoiler so it reappears next time (if privacy mode is on).
+  document.getElementById('pdf-preview-dialog')?.addEventListener('close', () => {
+    document.getElementById('pdf-preview-embed').src = '';
+    document.querySelector('#pdf-preview-dialog .pdf-spoiler')?.classList.remove('revealed');
+  });
+</script>
+{{end}}
+{{end}}
+{{end}}

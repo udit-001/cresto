@@ -1,0 +1,243 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <script>
+    (() => {
+      try {
+        const stored = localStorage.getItem("themeMode");
+        if (stored ? stored === "dark" : matchMedia("(prefers-color-scheme: dark)").matches) {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (_) {}
+    })();
+    (() => {
+      try {
+        if (localStorage.getItem("privacyMode") === "1") {
+          document.documentElement.classList.add("privacy-mode");
+        }
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/basecoat.cdn.min.css">
+  <script src="/static/all.min.js" defer></script>
+</head>
+<body class="bg-background text-foreground"{{if .ActiveBatchID}} data-active-batch="{{.ActiveBatchID}}"{{end}}>
+  <div class="grid h-screen overflow-hidden grid-cols-[60px_1fr]">
+    <!-- Icon rail -->
+    <aside class="flex flex-col border-r bg-card h-full relative z-30 w-[60px] min-w-[60px]">
+      <a href="/" class="flex items-center justify-center border-b py-2.5 text-foreground hover:text-muted-foreground no-underline" aria-label="Cresto home">
+        <svg class="shrink-0" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="2" x2="12" y2="22"/>
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>
+      </a>
+
+      <nav class="flex flex-col flex-1 py-2 gap-0.5 px-2">
+        <a href="/" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors {{if eq .Active "dashboard"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}" data-tooltip="Dashboard" data-side="right" {{if eq .Active "dashboard"}}aria-current="page"{{end}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+        </a>
+        <a href="/annual" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors {{if eq .Active "annual"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}" aria-label="Annual" data-tooltip="Annual" data-side="right" {{if eq .Active "annual"}}aria-current="page"{{end}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        </a>
+        <a href="/payslips" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors {{if eq .Active "payslips"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}" data-tooltip="Payslips" data-side="right" {{if eq .Active "payslips"}}aria-current="page"{{end}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+        </a>
+        <a href="/payslips?status=pending_review" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors {{if eq .Active "review"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}" data-tooltip="Review" data-side="right" {{if eq .Active "review"}}aria-current="page"{{end}}>
+          <span class="relative">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+            {{if .PendingCount}}<span class="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-mono leading-[16px] text-center tabular-nums">{{.PendingCount}}</span>{{end}}
+          </span>
+        </a>
+
+        <div class="flex-1 min-h-2"></div>
+
+        <a href="/upload" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Upload payslip" data-tooltip="Upload payslip" data-side="right" id="upload-rail">
+          <span class="relative">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span id="batch-dot" class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary shadow-[0_0_6px] shadow-primary/60{{if not .ActiveBatchID}} hidden{{end}}"></span>
+          </span>
+        </a>
+
+        <button type="button" aria-label="Toggle privacy mode" data-tooltip="Toggle privacy mode" data-side="right" id="privacy-toggle" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors text-muted-foreground hover:bg-muted hover:text-foreground" data-variant="outline" data-size="icon">
+          <svg class="privacy-icon-off" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          <svg class="privacy-icon-on" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+        </button>
+
+        <button type="button" aria-label="Toggle dark mode" data-tooltip="Toggle dark mode" data-side="right" onclick="window.basecoat.theme.toggle()" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors text-muted-foreground hover:bg-muted hover:text-foreground" data-variant="outline" data-size="icon">
+          <span class="hidden dark:block"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span>
+          <span class="block dark:hidden"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg></span>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Main area: topbar + scrollable content -->
+    <main class="flex flex-col overflow-hidden">
+      <!-- TopBar: breadcrumbs or page title -->
+      <header class="flex items-center justify-between gap-4 min-h-10 px-6 py-2 bg-background border-b">
+        <div class="flex items-center gap-2 min-w-0">
+          {{if .Breadcrumbs}}
+            <nav class="breadcrumb" aria-label="Breadcrumb">
+              <ol class="flex items-center gap-0 text-sm min-w-0">
+                {{range $i, $crumb := .Breadcrumbs}}
+                  {{if $i}}<li aria-hidden="true"><svg class="text-muted-foreground/60" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></li>{{end}}
+                  <li{{if not $crumb.Href}} aria-current="page"{{end}}>
+                    {{if $crumb.Href}}<a href="{{$crumb.Href}}" class="text-muted-foreground hover:text-foreground truncate">{{$crumb.Label}}</a>{{else}}<span class="text-sm font-semibold text-foreground truncate">{{$crumb.Label}}</span>{{end}}
+                  </li>
+                {{end}}
+              </ol>
+            </nav>
+          {{else}}
+            <h1 class="text-lg font-semibold whitespace-nowrap">{{.Title}}</h1>
+          {{end}}
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          {{block "actions" .}}{{end}}
+        </div>
+      </header>
+
+      <div class="flex-1 overflow-y-auto">
+        <div class="mx-auto {{if .ContainerClass}}{{.ContainerClass}}{{else}}max-w-6xl{{end}} px-6 py-8">
+          {{template "page" .}}
+        </div>
+      </div>
+
+      <div id="toaster" class="toaster"></div>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const params = new URLSearchParams(location.search);
+      const msg = params.get('toast');
+
+      // Persist filter state across navigations.
+      const q = location.search;
+      if (q && !q.includes('toast=') && location.pathname === '/payslips') {
+        sessionStorage.setItem('payslip-filter', q);
+      }
+      // Restore filter on payslip breadcrumb links (exclude nav rail).
+      // Strip the status param first: a confirmed/failed payslip's breadcrumb
+      // must not inherit the pending_review (or failed) filter from a prior
+      // visit to a status-filtered list — only employer/year filters carry over.
+      var storedFilter = sessionStorage.getItem('payslip-filter');
+      if (storedFilter) {
+        var sp = new URLSearchParams(storedFilter);
+        sp.delete('status');
+        var restored = sp.toString();
+        document.querySelectorAll('nav.breadcrumb a[href="/payslips"], a.back-to-payslips').forEach(function(a) {
+          a.href = '/payslips' + (restored ? '?' + restored : '');
+        });
+      }
+
+      // Show a toast. Basecoat's deferred all.min.js initialises the toaster
+      // element asynchronously via MutationObserver — the .toast() method
+      // isn't available when this inline script first runs, and the exact
+      // timing depends on when the deferred script downloads and executes.
+      // Poll briefly until it's ready.
+      function showToast(category, title) {
+        const MAX_RETRIES = 40;        // 40 × 50ms = 2s max wait
+        const RETRY_INTERVAL = 50;     // ms between checks
+        let retries = MAX_RETRIES;
+        const tryShow = () => {
+          const toaster = document.getElementById('toaster');
+          if (toaster && typeof toaster.toast === 'function') {
+            toaster.toast({ category, title });
+          } else if (retries-- > 0) {
+            setTimeout(tryShow, RETRY_INTERVAL);
+          }
+          // else: Basecoat never initialised within 2s — silent no-op.
+          // Better than throwing; the toast is advisory, not critical.
+        };
+        tryShow();
+      }
+      if (msg) showToast(params.get('variant') || 'success', msg);
+
+      const batchID = document.body.dataset.activeBatch;
+      if (!batchID) return;
+      const doneKey = 'batch-done-' + batchID;
+      if (sessionStorage.getItem(doneKey)) {
+        document.getElementById('batch-dot')?.classList.add('hidden');
+        return;
+      }
+
+      let poll = setInterval(async () => {
+        try {
+          const res = await fetch('/api/batch/' + batchID);
+          if (!res.ok) { stop(); return; }
+          const data = await res.json();
+          if (data.processed_count + data.failed_count >= data.total) {
+            stop();
+            const counts = data.processed_count + '/' + data.total + ' parsed, ' + data.failed_count + ' failed';
+            showToast('success', 'Batch complete: ' + counts);
+            sessionStorage.setItem(doneKey, '1');
+          }
+        } catch (_) { stop(); }
+      }, 3000);
+
+      function stop() {
+        clearInterval(poll);
+        document.getElementById('batch-dot')?.classList.add('hidden');
+      }
+    })();
+
+    // Privacy mode toggle: blur all money amounts, persist to localStorage.
+    (() => {
+      const toggle = document.getElementById('privacy-toggle');
+      if (!toggle) return;
+      toggle.addEventListener('click', () => {
+        const root = document.documentElement;
+        const isOn = root.classList.toggle('privacy-mode');
+        try { localStorage.setItem('privacyMode', isOn ? '1' : '0'); } catch (_) {}
+        // Reset PDF spoilers when turning privacy off so they reappear next time.
+        if (!isOn) {
+          document.querySelectorAll('.pdf-spoiler.revealed').forEach(s => s.classList.remove('revealed'));
+        }
+      });
+    })();
+
+    // PDF spoiler reveal: clicking the overlay reveals the embed.
+    document.querySelectorAll('.pdf-spoiler-overlay').forEach(overlay => {
+      overlay.addEventListener('click', () => {
+        overlay.closest('.pdf-spoiler')?.classList.add('revealed');
+      });
+    });
+  </script>
+  <style>
+    .rail-item { position: relative; }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    #batch-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+    /* Table row press feedback (taps on clickable rows). */
+    .table tbody tr[onclick]:active { background-color: var(--color-muted); transition: background-color 120ms ease-out; }
+
+    /* Privacy mode: blur all money amounts. The .money span is emitted by the
+       money template func, so every amount on every page is covered. */
+    .privacy-mode .money { filter: blur(6px); user-select: none; transition: filter 0.15s ease-out; }
+    .privacy-mode .sensitive { filter: blur(6px); user-select: none; transition: filter 0.15s ease-out; }
+    .privacy-mode canvas { filter: blur(8px); user-select: none; pointer-events: none; }
+
+    /* Privacy toggle icon swap: show eye when off, eye-off when on. */
+    .privacy-icon-on { display: none; }
+    .privacy-mode .privacy-icon-off { display: none; }
+    .privacy-mode .privacy-icon-on { display: block; }
+
+    /* PDF spoiler overlay (Discord-style): covers the embed while privacy
+       mode is on. Click to reveal temporarily; toggling privacy off clears it. */
+    .pdf-spoiler-overlay { opacity: 0; pointer-events: none; transition: opacity 0.2s ease-out; }
+    .privacy-mode .pdf-spoiler-overlay { opacity: 1; pointer-events: auto; }
+    .privacy-mode .pdf-spoiler.revealed .pdf-spoiler-overlay { opacity: 0; pointer-events: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .table tbody tr[onclick] { transition: none; }
+      .privacy-mode .money { transition: none; }
+      .pdf-spoiler-overlay { transition: none; }
+    }
+  </style>
+</body>
+</html>
+{{end}}

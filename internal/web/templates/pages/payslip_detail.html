@@ -1,0 +1,307 @@
+{{define "actions"}}
+  {{if eq .Mode "confirmed"}}
+    <a href="/payslip/{{.Payslip.ID}}?edit=1" class="btn" data-variant="outline" data-size="sm">Edit</a>
+  {{end}}
+  {{if eq .Mode "pending"}}
+    {{if .ReviewIndex}}<span class="text-muted-foreground text-sm tabular-nums whitespace-nowrap">{{.ReviewIndex}} of {{.ReviewTotal}} reviewed</span>{{end}}
+    {{if .NextPendingID}}<a href="/payslip/{{.NextPendingID}}" id="skip-link" class="btn" data-variant="outline" data-size="sm">Skip <kbd class="kbd" data-icon="inline-end">s</kbd></a>{{end}}
+  {{end}}
+  <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="openDeleteDialog()">Delete <kbd class="kbd" data-icon="inline-end">d</kbd></button>
+{{end}}
+
+{{define "page"}}
+{{$p := .Payslip}}
+{{$period := periodLabel $p.PayPeriodMonth $p.PayPeriodYear}}
+
+{{if eq .Mode "failed"}}
+  <div class="alert mb-6" data-variant="destructive">
+    <h2>Parse failed</h2>
+    <section>{{$p.ErrorMessage}}</section>
+    <footer>
+      <form method="POST" action="/payslip/{{$p.ID}}/retry" class="inline">
+        <button type="submit" class="btn" data-size="sm">Retry parse</button>
+      </form>
+    </footer>
+  </div>
+{{end}}
+
+<div class="grid gap-6 lg:grid-cols-2">
+  <div class="card">
+    <header>
+      <h2>Source PDF</h2>
+    </header>
+    <section>
+      {{if .PDFMissing}}
+        <p class="text-muted-foreground">Source PDF not found on disk. Parsed values are still available.</p>
+      {{else if $p.RawPDFPath}}
+        <div class="pdf-spoiler relative">
+          <embed src="/pdf/{{$p.ID}}#pagemode=none" type="application/pdf" class="w-full h-[70vh] min-h-[500px] rounded border" tabindex="-1" onfocus="this.blur()">
+          <button type="button" class="pdf-spoiler-overlay absolute inset-0 flex items-center justify-center bg-muted/80 backdrop-blur-sm rounded border cursor-pointer transition-opacity" aria-label="Reveal PDF">
+            <span class="flex flex-col items-center gap-2 text-muted-foreground">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span class="text-sm font-medium">Click to reveal PDF</span>
+            </span>
+          </button>
+        </div>
+        <p class="text-muted-foreground text-sm mt-2">If the PDF doesn't render inline, <a href="/pdf/{{$p.ID}}" target="_blank" class="underline">open it in a new tab</a>.</p>
+      {{else}}
+        <p class="text-muted-foreground">No source PDF attached.</p>
+      {{end}}
+    </section>
+  </div>
+
+  <div class="card">
+    <header>
+      <h2>Parsed data</h2>
+      <div class="card-action">
+        {{if eq .Mode "confirmed"}}<span class="badge bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300">Confirmed</span>{{else if eq .Mode "failed"}}<span class="badge bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300">Failed</span>{{else}}<span class="badge bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">Pending Review</span>{{end}}
+      </div>
+    </header>
+    <section>
+      {{if eq .Mode "confirmed"}}
+        <div class="grid gap-6">
+          <fieldset class="fieldset">
+            <legend>Header</legend>
+            <dl class="grid gap-3 sm:grid-cols-2">
+              <div><dt class="text-muted-foreground text-sm">Employer</dt><dd class="font-medium sensitive">{{$p.EmployerName}}</dd></div>
+              <div><dt class="text-muted-foreground text-sm">Designation</dt><dd class="font-medium">{{$p.Designation}}</dd></div>
+              <div><dt class="text-muted-foreground text-sm">Pay period</dt><dd class="font-medium">{{$period}}</dd></div>
+              <div><dt class="text-muted-foreground text-sm">Employee ID</dt><dd class="font-medium sensitive">{{$p.EmployeeID}}</dd></div>
+              <div><dt class="text-muted-foreground text-sm">Pay days</dt><dd class="font-medium">{{$p.PayDays}} / {{$p.TotalDays}}</dd></div>
+            </dl>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend>Components</legend>
+            <div class="table-container">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Raw label</th>
+                    <th>Canonical</th>
+                    <th class="text-right">Amount</th>
+                    <th class="text-right">YTD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {{range .Rows}}
+                    <tr>
+                      <td class="border-l-2 {{if eq .Component.Category "deduction"}}border-destructive{{else}}border-success{{end}}">{{$comp := .Component}}<span>{{.Component.RawLabel}}</span></td>
+                      <td>{{(canonName .Canons $comp.CanonicalID).DisplayName}}</td>
+                      <td class="text-right numeric">&#8377;{{money .Component.Amount}}</td>
+                      <td class="text-right numeric">&#8377;{{money .Component.YTDAmt}}</td>
+                    </tr>
+                  {{end}}
+                </tbody>
+              </table>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend>Totals</legend>
+            <dl class="grid gap-3 sm:grid-cols-3">
+              <div><dt class="text-muted-foreground text-sm">Gross</dt><dd class="font-medium numeric">&#8377;{{money $p.GrossSalary}}</dd></div>
+              <div><dt class="text-muted-foreground text-sm">Deductions</dt><dd class="font-medium numeric">&#8377;{{money $p.TotalDeductions}}</dd></div>
+              <div><dt class="text-muted-foreground text-sm">Net pay</dt><dd class="font-semibold numeric text-lg">&#8377;{{money $p.NetPay}}</dd></div>
+            </dl>
+          </fieldset>
+
+        </div>
+      {{else}}
+        <form method="POST" action="/payslip/{{$p.ID}}" id="review-form" class="grid gap-6">
+          <fieldset class="fieldset">
+            <legend class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Header</legend>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div role="group" class="field">
+                <label for="employer">Employer</label>
+                <input id="employer" name="employer" class="input sensitive" type="text" value="{{$p.EmployerName}}" required>
+              </div>
+              <div role="group" class="field">
+                <label for="designation">Designation</label>
+                <input id="designation" name="designation" class="input" type="text" value="{{$p.Designation}}">
+              </div>
+              <div role="group" class="field">
+                <label for="month">Pay period month (1-12)</label>
+                <input id="month" name="month" class="input" type="number" min="1" max="12" value="{{$p.PayPeriodMonth}}" required>
+              </div>
+              <div role="group" class="field">
+                <label for="year">Pay period year</label>
+                <input id="year" name="year" class="input" type="number" min="1900" max="2100" value="{{$p.PayPeriodYear}}" required>
+              </div>
+              <div role="group" class="field">
+                <label for="employee_id">Employee ID</label>
+                <input id="employee_id" name="employee_id" class="input sensitive" type="text" value="{{$p.EmployeeID}}">
+              </div>
+              <div role="group" class="field">
+                <label>Pay days / Total days</label>
+                <div class="flex gap-2">
+                  <input name="pay_days" class="input" type="number" min="0" value="{{$p.PayDays}}" aria-label="Pay days">
+                  <input name="total_days" class="input" type="number" min="0" value="{{$p.TotalDays}}" aria-label="Total days">
+                </div>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Components</legend>
+            <div class="table-container">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Raw label</th>
+                    <th>Canonical</th>
+                    <th class="text-right">Amount</th>
+                    <th class="text-right">YTD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {{range .Rows}}
+                    {{$comp := .Component}}
+                    <tr>
+                      <td class="border-l-2 {{if eq .Component.Category "deduction"}}border-destructive{{else}}border-success{{end}}">
+                        <input type="text" name="comp_{{.Index}}_raw_label" class="input" value="{{.Component.RawLabel}}" required>
+                        <input type="hidden" name="comp_{{.Index}}_category" value="{{.Component.Category}}">
+                      </td>
+                      <td>
+                        <select name="comp_{{.Index}}_canonical" class="select" required>
+                          {{range .Canons}}
+                            <option value="{{.ID}}" {{if eq .ID $comp.CanonicalID}}selected{{end}}>{{.DisplayName}}</option>
+                          {{end}}
+                        </select>
+                      </td>
+                      <td><input type="number" name="comp_{{.Index}}_amount" class="input text-right" step="0.01" value="{{.Component.Amount}}" required></td>
+                      <td><input type="number" name="comp_{{.Index}}_ytd" class="input text-right" step="0.01" value="{{.Component.YTDAmt}}"></td>
+                    </tr>
+                  {{end}}
+                </tbody>
+              </table>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Totals</legend>
+            <div class="grid gap-4 sm:grid-cols-3">
+              <div role="group" class="field">
+                <label for="gross_salary">Gross salary</label>
+                <input id="gross_salary" name="gross_salary" class="input" type="number" step="0.01" value="{{$p.GrossSalary}}">
+              </div>
+              <div role="group" class="field">
+                <label for="total_deductions">Total deductions</label>
+                <input id="total_deductions" name="total_deductions" class="input" type="number" step="0.01" value="{{$p.TotalDeductions}}">
+              </div>
+              <div role="group" class="field">
+                <label for="net_pay">Net pay</label>
+                <input id="net_pay" name="net_pay" class="input" type="number" step="0.01" value="{{$p.NetPay}}">
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="flex gap-2 justify-end">
+            {{if eq $p.Status "confirmed"}}<a href="/payslip/{{$p.ID}}" class="btn" data-variant="ghost">Cancel</a>{{end}}
+            <button type="submit" name="action" value="save" class="btn" data-variant="outline">Save draft</button>
+            {{if ne .Mode "failed"}}<button type="submit" name="action" value="confirm" class="btn" id="confirm-btn">Confirm <kbd class="kbd" data-icon="inline-end">c</kbd></button>{{end}}
+          </div>
+          {{if eq .Mode "pending"}}
+            <p class="text-muted-foreground text-sm text-right flex items-center justify-end gap-1 flex-wrap"><kbd class="kbd">j</kbd><kbd class="kbd">k</kbd><span>navigate ·</span><kbd class="kbd">Enter</kbd><span>confirm ·</span><kbd class="kbd">Esc</kbd><span>close</span></p>
+          {{end}}
+        </form>
+      {{end}}
+    </section>
+  </div>
+</div>
+
+<dialog class="alert-dialog" id="delete-dialog">
+  <div>
+    <header>
+      <h2>Delete payslip?</h2>
+      <p>This permanently removes the payslip for {{$period}} and its PDF. This cannot be undone.</p>
+    </header>
+    <footer>
+      <button type="button" class="btn" data-variant="outline" onclick="this.closest('.alert-dialog').close()">Cancel</button>
+      <form method="POST" action="/payslip/{{$p.ID}}/delete">
+        <button type="submit" class="btn" data-variant="destructive">Delete</button>
+      </form>
+    </footer>
+  </div>
+</dialog>
+
+<script>
+  // openDeleteDialog is used by the topbar Delete button on every payslip
+  // page (confirmed, pending, failed) — keep it outside the pending-only
+  // script block so the onclick handler resolves everywhere.
+  function openDeleteDialog() {
+    const dlg = document.getElementById('delete-dialog');
+    if (!dlg || dlg.open) return;
+    dlg.showModal();
+    // Move focus into the dialog so Tab cycles within it (Cancel → Delete).
+    // Cancel is the safer default — Enter on Delete would submit the form.
+    dlg.querySelector('footer button')?.focus();
+  }
+</script>
+
+{{if eq .Mode "pending"}}
+{{if .PrevPendingID}}<a href="/payslip/{{.PrevPendingID}}" id="prev-link" hidden></a>{{end}}
+{{if .NextPendingID}}<a href="/payslip/{{.NextPendingID}}" id="next-link" hidden></a>{{end}}
+
+<script src="/static/validation.js"></script>
+<script>
+  const form = document.getElementById('review-form');
+  const confirmBtn = document.getElementById('confirm-btn');
+
+  if (form) {
+    form.querySelectorAll('input[type="number"]').forEach(inp => {
+      inp.addEventListener('blur', () => validateField(inp));
+      inp.addEventListener('input', () => clearFieldError(inp));
+    });
+    form.addEventListener('submit', (e) => {
+      if (!validateForm(form)) e.preventDefault();
+    });
+    form.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      if (e.target.tagName !== 'INPUT') return;
+      e.preventDefault();
+      if (validateForm(form)) confirmBtn.click();
+    });
+  }
+
+  // Global keyboard shortcuts (pending mode only)
+  document.addEventListener('keydown', (e) => {
+    if (e.target.closest('input, textarea, select')) return;
+    const dialogOpen = document.querySelector('.alert-dialog[open]');
+    // While the delete dialog is open, only Escape is honored; everything
+    // else (j/k/s/c/d) is suppressed so it doesn't bleed through.
+    if (dialogOpen && e.key !== 'Escape') return;
+
+    switch (e.key) {
+      case 'c':
+        e.preventDefault();
+        confirmBtn?.click();
+        break;
+      case 's':
+        e.preventDefault();
+        const skip = document.getElementById('skip-link');
+        if (skip) window.location.href = skip.href;
+        break;
+      case 'd':
+        e.preventDefault();
+        openDeleteDialog();
+        break;
+      case 'Escape':
+        if (dialogOpen) { e.preventDefault(); dialogOpen.close(); }
+        break;
+      case 'j':
+        e.preventDefault();
+        const next = document.getElementById('next-link');
+        if (next) window.location.href = next.href;
+        break;
+      case 'k':
+        e.preventDefault();
+        const prev = document.getElementById('prev-link');
+        if (prev) window.location.href = prev.href;
+        break;
+    }
+  });
+</script>
+
+{{end}}
+{{end}}
