@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="/static/basecoat.cdn.min.css">
   <script src="/static/all.min.js" defer></script>
 </head>
-<body class="bg-background text-foreground"{{if .ActiveBatchID}} data-active-batch="{{.ActiveBatchID}}"{{end}}>
+<body class="bg-background text-foreground antialiased"{{if .ActiveBatchID}} data-active-batch="{{.ActiveBatchID}}"{{end}}>
   <div class="grid h-screen overflow-hidden grid-cols-[60px_1fr]">
     <!-- Icon rail -->
     <aside class="flex flex-col border-r bg-card h-full relative z-30 w-[60px] min-w-[60px]">
@@ -215,6 +215,7 @@
     });
   </script>
   <style>
+    :root { font-synthesis: none; }
     .rail-item { position: relative; }
     @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     #batch-dot { animation: pulse-dot 2s ease-in-out infinite; }
