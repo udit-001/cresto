@@ -1,4 +1,4 @@
-# Cresto — Project Reference (formerly `income-tracker`)
+# Cresto — Project Reference
 
 ## Brand
 
@@ -10,7 +10,7 @@
 
 - **Go 1.26.5** monolith, server-rendered HTML — NOT React/Next.js/SPA
 - **SQLite** via `modernc.org/sqlite` (pure Go, no CGO)
-- **`html/template`** — Go templates, no client framework
+- **`html/template`** for rendering
 - **Tailwind CSS v4** + **Basecoat** component library
 - **Chart.js** for charts, **LM Studio** (local) for LLM vision extraction
 
@@ -101,12 +101,11 @@ internal/
 - Don't assume a JS framework — it's all server-rendered Go templates
 - Don't edit static files without rebuilding — they're `embed.FS`, not hot-reloaded
 - Don't create a `companies` table without explicit need — employer_name is sufficient for filtering
-- Don't use native `<select>` — use Basecoat select component
 - Don't add new template funcs without registering them in `tmplFuncs` (server.go)
-- Don't add Font Awesome — Basecoat uses inline Lucide SVGs for icons
 - Don't edit `schema.sql` — it's gone. Schema changes go in `internal/store/migrations/` as numbered SQL files with `-- +goose Up` / `-- +goose Down` markers. Run `make migrate-create name=<desc>` to add one.
-- Don't compare float64 with int literals in templates — use `neg`/`sign` funcs
 - Don't introduce a `Broker` interface at the web layer — Groww and Kite have different capabilities (Kite has MF holdings). They're separate concrete dependencies.
+
+For template comparison rules, Basecoat select HTML, and icon conventions, see the sections above.
 
 ## Broker MCP integrations
 
