@@ -500,6 +500,10 @@ func (s *Server) Routes() *http.ServeMux {
 	// Settings: broker + LLM connection management (PF-64).
 	mux.HandleFunc("GET /settings", s.handleSettings)
 	mux.HandleFunc("POST /settings/llm", s.handleSettingsLLM)
+	mux.HandleFunc("POST /settings/tax-profile", s.handleSettingsTaxProfile)
+	mux.HandleFunc("POST /settings/bank-account", s.handleSettingsBankAccountAdd)
+	mux.HandleFunc("POST /settings/bank-account/{id}/delete", s.handleSettingsBankAccountDelete)
+	mux.HandleFunc("POST /settings/bank-account/{id}/primary", s.handleSettingsBankAccountPrimary)
 
 	// greytHR: payslip auto-fetch from the ESS portal.
 	mux.HandleFunc("GET /greythr", s.handleGreytHRPage)

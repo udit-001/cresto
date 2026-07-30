@@ -1449,3 +1449,173 @@ func (s *Store) GetComponentTimeline(ctx context.Context, canonicalID int64, emp
 	}
 	return out, rows.Err()
 }
+
+// TaxpayerProfile is the singleton identity record (id=1). PAN and DOB
+// decrypt AIS JSON; declarant name and verification place populate the
+// ITR-2 verification block.
+type TaxpayerProfile struct {
+	PAN               string
+	DOB               string // DDMMYYYY, no separators
+	DeclarantName     string
+	VerificationPlace string
+	CreatedAt         string
+	UpdatedAt         string
+}
+
+// BankAccount is one of the user's bank accounts. One account may be
+// primary (used for refund credit in the ITR-2 JSON).
+type BankAccount struct {
+	ID            int64
+	IFSC          string
+	AccountNumber string
+	AccountType   string // "savings" or "current"
+	BankName      string
+	IsPrimary     bool
+	CreatedAt     string
+}
+
+// GetTaxpayerProfile returns the singleton profile. Returns ErrNotFound if
+// the row hasn't been created yet (fresh database, user hasn't entered details).
+func (s *Store) GetTaxpayerProfile(ctx context.Context) (TaxpayerProfile, error) {
+	var p TaxpayerProfile
+	err := s.db.QueryRowContext(ctx,
+		`SELECT pan, dob, declarant_name, verification_place, created_at, updated_at
+		 FROM taxpayer_profile WHERE id = 1`).Scan(
+		&p.PAN, &p.DOB, &p.DeclarantName, &p.VerificationPlace, &p.CreatedAt, &p.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return TaxpayerProfile{}, ErrNotFound
+	}
+	return p, err
+}
+
+// SaveTaxpayerProfile upserts the singleton profile (id=1). If the row
+// doesn't exist it's inserted; if it does, all fields are overwritten.
+func (s *Store) SaveTaxpayerProfile(ctx context.Context, p TaxpayerProfile) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO taxpayer_profile (id, pan, dob, declarant_name, verification_place, created_at, updated_at)
+		 VALUES (1, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+		 ON CONFLICT(id) DO UPDATE SET
+		   pan = excluded.pan,
+		   dob = excluded.dob,
+		   declarant_name = excluded.declarant_name,
+		   verification_place = excluded.verification_place,
+		   updated_at = excluded.updated_at`,
+		p.PAN, p.DOB, p.DeclarantName, p.VerificationPlace)
+	return err
+}
+
+// ListBankAccounts returns all bank accounts, ordered with primary first
+// then by creation order.
+func (s *Store) ListBankAccounts(ctx context.Context) ([]BankAccount, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, ifsc, account_number, account_type, bank_name, is_primary, created_at
+		 FROM bank_accounts
+		 ORDER BY is_primary DESC, id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []BankAccount
+	for rows.Next() {
+		var a BankAccount
+		var isPrimary int
+		if err := rows.Scan(&a.ID, &a.IFSC, &a.AccountNumber, &a.AccountType, &a.BankName, &isPrimary, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		a.IsPrimary = isPrimary == 1
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// SaveBankAccount inserts a new bank account. If isPrimary is true, any
+// existing primary is cleared first (only one primary at a time).
+func (s *Store) SaveBankAccount(ctx context.Context, a BankAccount) (int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	if a.IsPrimary {
+		if _, err := tx.ExecContext(ctx, `UPDATE bank_accounts SET is_primary = 0 WHERE is_primary = 1`); err != nil {
+			return 0, err
+		}
+	}
+	isPrimary := 0
+	if a.IsPrimary {
+		isPrimary = 1
+	}
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO bank_accounts (ifsc, account_number, account_type, bank_name, is_primary)
+		 VALUES (?, ?, ?, ?, ?)`,
+		a.IFSC, a.AccountNumber, a.AccountType, a.BankName, isPrimary)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	id, _ := res.LastInsertId()
+	return id, nil
+}
+
+// DeleteBankAccount removes a bank account by ID. If the deleted account
+// was primary, the most recently created remaining account becomes primary
+// (if any exist) so there's always a primary when accounts exist.
+func (s *Store) DeleteBankAccount(ctx context.Context, id int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var wasPrimary int
+	err = tx.QueryRowContext(ctx, `SELECT is_primary FROM bank_accounts WHERE id = ?`, id).Scan(&wasPrimary)
+	if err == sql.ErrNoRows {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM bank_accounts WHERE id = ?`, id); err != nil {
+		return err
+	}
+
+	if wasPrimary == 1 {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE bank_accounts SET is_primary = 1
+			 WHERE id = (SELECT id FROM bank_accounts ORDER BY created_at DESC LIMIT 1)`); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// SetPrimaryBankAccount marks the given account as primary and clears any
+// other primary. Returns ErrNotFound if the account doesn't exist.
+func (s *Store) SetPrimaryBankAccount(ctx context.Context, id int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var exists int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM bank_accounts WHERE id = ?`, id).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE bank_accounts SET is_primary = 0 WHERE is_primary = 1`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE bank_accounts SET is_primary = 1 WHERE id = ?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

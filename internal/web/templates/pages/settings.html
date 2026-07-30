@@ -85,6 +85,121 @@
     </div>
   </section>
 
+  <!-- Tax Profile -->
+  <section class="space-y-3">
+    <div>
+      <h2 class="text-xl font-semibold leading-tight text-balance">Tax Profile</h2>
+      <p class="text-sm text-muted-foreground mt-1 text-pretty">Your PAN and date of birth decrypt AIS imports. Verification details populate the ITR-2 export. Stored locally — never sent anywhere.</p>
+    </div>
+
+    <div class="rounded-lg border bg-card p-4 space-y-3">
+      <form method="POST" action="/settings/tax-profile" class="space-y-3">
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium" for="tp-pan">PAN</label>
+            <input type="text" id="tp-pan" name="pan" value="{{.PAN}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="ABCDE1234F" maxlength="10">
+          </div>
+          <div>
+            <label class="text-sm font-medium" for="tp-dob">Date of Birth <span class="text-muted-foreground font-normal">(DDMMYYYY)</span></label>
+            <input type="text" id="tp-dob" name="dob" value="{{.DOB}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="15061990" maxlength="8">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium" for="tp-name">Declarant Name</label>
+            <input type="text" id="tp-name" name="declarant_name" value="{{.DeclarantName}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="Full name as on PAN">
+          </div>
+          <div>
+            <label class="text-sm font-medium" for="tp-place">Verification Place</label>
+            <input type="text" id="tp-place" name="verification_place" value="{{.VerifyPlace}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="City">
+          </div>
+        </div>
+        <button type="submit" class="btn" data-size="sm">Save</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Bank Accounts -->
+  <section class="space-y-3">
+    <div>
+      <h2 class="text-xl font-semibold leading-tight text-balance">Bank Accounts</h2>
+      <p class="text-sm text-muted-foreground mt-1 text-pretty">For refund credit in the ITR-2 export. Mark one account as primary — that's where your refund goes.</p>
+    </div>
+
+    {{if .BankAccounts}}
+    <div class="space-y-2">
+      {{range .BankAccounts}}
+      <div class="flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
+        <div class="flex items-center gap-3">
+          {{if .IsPrimary}}
+          <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          {{else}}
+          <svg class="text-muted-foreground" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+          {{end}}
+          <div>
+            <div class="font-medium">{{.BankName}} <span class="text-muted-foreground font-normal text-sm">({{.AccountType}})</span> {{if .IsPrimary}}<span class="badge ml-1" data-variant="outline">Primary</span>{{end}}</div>
+            <div class="text-sm text-muted-foreground">{{.IFSC}} &middot; {{.AccountNumber}}</div>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          {{if not .IsPrimary}}
+          <form method="POST" action="/settings/bank-account/{{.ID}}/primary">
+            <button type="submit" class="btn" data-variant="ghost" data-size="sm">Set primary</button>
+          </form>
+          {{end}}
+          <form method="POST" action="/settings/bank-account/{{.ID}}/delete">
+            <button type="submit" class="btn" data-variant="ghost" data-size="sm text-destructive">Remove</button>
+          </form>
+        </div>
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+
+    <details class="rounded-lg border bg-card p-4">
+      <summary class="font-medium text-sm cursor-pointer">Add bank account</summary>
+      <form method="POST" action="/settings/bank-account" class="mt-3 space-y-3">
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium" for="ba-ifsc">IFSC Code</label>
+            <input type="text" id="ba-ifsc" name="ifsc" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="HDFC0000123">
+          </div>
+          <div>
+            <label class="text-sm font-medium" for="ba-acct">Account Number</label>
+            <input type="text" id="ba-acct" name="account_number" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="1234567890">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium" for="ba-bank">Bank Name</label>
+            <input type="text" id="ba-bank" name="bank_name" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="HDFC Bank">
+          </div>
+          <div>
+            <label class="text-sm font-medium" for="ba-type">Account Type</label>
+            <div class="select" data-placeholder="Savings">
+              <button type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="ba-type-listbox" class="w-full mt-1">
+                <span class="truncate">Savings</span>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div data-popover aria-hidden="true">
+                <div role="listbox" id="ba-type-listbox">
+                  <div role="option" data-value="savings">Savings</div>
+                  <div role="option" data-value="current">Current</div>
+                </div>
+              </div>
+              <input type="hidden" name="account_type" value="savings">
+            </div>
+          </div>
+        </div>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="is_primary">
+          Set as primary account
+        </label>
+        <button type="submit" class="btn" data-size="sm">Add account</button>
+      </form>
+    </details>
+  </section>
+
   <!-- LLM Studio -->
   <section class="space-y-3">
     <div>
