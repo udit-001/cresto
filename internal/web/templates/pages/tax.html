@@ -1,0 +1,292 @@
+{{define "page"}}
+<div class="space-y-8">
+
+  {{if not .HasAIS}}
+  <!-- Empty state: import wizard -->
+  <section class="space-y-3">
+    <div>
+      <h2 class="text-xl font-semibold leading-tight text-balance">Tax</h2>
+      <p class="text-sm text-muted-foreground mt-1 text-pretty">Import your AIS to populate salary, interest, dividends, and TDS data for ITR filing.</p>
+    </div>
+
+    {{if not .HasProfile}}
+    <div class="rounded-lg border border-warning/50 bg-warning/5 p-4">
+      <div class="flex items-start gap-3">
+        <svg class="text-warning flex-none mt-0.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+        <div class="text-sm">
+          <p class="font-medium">Set up your Tax Profile first</p>
+          <p class="text-muted-foreground mt-1">Cresto needs your PAN and date of birth to decrypt the AIS file. <a href="/settings" class="underline">Go to Settings →</a></p>
+        </div>
+      </div>
+    </div>
+    {{end}}
+
+    <div class="rounded-lg border bg-card p-6 space-y-4">
+      <div class="flex items-start gap-3">
+        <span class="flex-none inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-semibold mt-0.5">1</span>
+        <div>
+          <p class="font-medium">Download your AIS JSON</p>
+          <ol class="text-sm text-muted-foreground mt-1 space-y-1 list-decimal list-inside">
+            <li>Go to <a href="https://www.incometax.gov.in" class="underline">incometax.gov.in</a> and log in</li>
+            <li>Services → Annual Information Statement (AIS)</li>
+            <li>Click "Download" → choose "AIS (JSON)"</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="flex items-start gap-3">
+        <span class="flex-none inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-semibold mt-0.5">2</span>
+        <div class="flex-1">
+          <p class="font-medium">Upload the AIS JSON file</p>
+          <p class="text-sm text-muted-foreground mt-1">Cresto will decrypt it automatically using your PAN and date of birth.</p>
+          <form method="POST" action="/tax/ais-upload" enctype="multipart/form-data" class="mt-3">
+            <div class="flex items-center gap-3">
+              <input type="file" name="ais" accept=".json,application/json" class="text-sm" required>
+              <button type="submit" class="btn" data-size="sm">Upload & Decrypt</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {{else}}
+  <!-- Populated state: AIS data display -->
+
+  <!-- FY Header -->
+  <div class="card">
+    <header class="flex items-center justify-between">
+      <div>
+        <h2 class="text-xl font-semibold tracking-tight">FY {{.FY}}</h2>
+        <p class="text-muted-foreground text-sm">AIS imported · ITR-2 · New tax regime</p>
+      </div>
+      <form method="POST" action="/tax/ais-upload" enctype="multipart/form-data" class="flex items-center gap-2">
+        <input type="file" name="ais" accept=".json,application/json" class="text-xs" required>
+        <button type="submit" class="btn" data-variant="outline" data-size="sm">Re-import</button>
+      </form>
+    </header>
+  </div>
+
+  <!-- Salary per employer -->
+  {{if .Salaries}}
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">Salary (AIS TDS-192)</h3>
+      <p class="text-muted-foreground text-sm">{{len .Salaries}} employer{{if gt (len .Salaries) 1}}s{{end}}</p>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <thead>
+          <tr class="text-xs text-muted-foreground">
+            <th class="text-left py-2">Employer</th>
+            <th class="text-left py-2">TAN</th>
+            <th class="text-right py-2">Gross Salary</th>
+            <th class="text-right py-2">TDS</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm">
+          {{range .Salaries}}
+          <tr>
+            <td class="py-2">{{.Employer}}</td>
+            <td class="py-2 text-muted-foreground font-mono text-xs">{{.TAN}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .GrossSalary}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .TDS}}</td>
+          </tr>
+          {{end}}
+          <tr class="border-t font-medium">
+            <td class="py-3" colspan="2">Total</td>
+            <td class="text-right py-3 tabular-nums">{{money .TotalSalary}}</td>
+            <td class="text-right py-3 tabular-nums">{{money .TotalAISTDS}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+  {{end}}
+
+  <!-- Interest per bank -->
+  {{if or .SavingsInterest .FDInterest}}
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">Interest Income (AIS SFT-016)</h3>
+      <p class="text-muted-foreground text-sm">Savings + FD · all taxable at slab rate (new regime)</p>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <thead>
+          <tr class="text-xs text-muted-foreground">
+            <th class="text-left py-2">Bank</th>
+            <th class="text-left py-2">Type</th>
+            <th class="text-right py-2">Amount</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm">
+          {{range .SavingsInterest}}
+          <tr>
+            <td class="py-2">{{.Bank}}</td>
+            <td class="py-2 text-muted-foreground">Savings</td>
+            <td class="text-right py-2 tabular-nums">{{money .Amount}}</td>
+          </tr>
+          {{end}}
+          {{range .FDInterest}}
+          <tr>
+            <td class="py-2">{{.Bank}}</td>
+            <td class="py-2 text-muted-foreground">FD</td>
+            <td class="text-right py-2 tabular-nums">{{money .Amount}}</td>
+          </tr>
+          {{end}}
+          <tr class="border-t font-medium">
+            <td class="py-3" colspan="2">Total Interest</td>
+            <td class="text-right py-3 tabular-nums">{{money .TotalInterest}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+  {{end}}
+
+  <!-- Dividends -->
+  {{if .Dividends}}
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">Dividends (AIS SFT-015)</h3>
+      <p class="text-muted-foreground text-sm">{{len .Dividends}} entries</p>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <thead>
+          <tr class="text-xs text-muted-foreground">
+            <th class="text-left py-2">Company</th>
+            <th class="text-right py-2">Amount</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm">
+          {{range .Dividends}}
+          <tr>
+            <td class="py-2">{{.Company}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .Amount}}</td>
+          </tr>
+          {{end}}
+          <tr class="border-t font-medium">
+            <td class="py-3">Total Dividends</td>
+            <td class="text-right py-3 tabular-nums">{{money .TotalDividends}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+  {{end}}
+
+  <!-- TDS Reconciliation -->
+  {{if .TDSRecon}}
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">TDS Reconciliation</h3>
+      <p class="text-muted-foreground text-sm">AIS vs Cresto payslip data</p>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <thead>
+          <tr class="text-xs text-muted-foreground">
+            <th class="text-left py-2">Deductor</th>
+            <th class="text-left py-2">Section</th>
+            <th class="text-right py-2">AIS Income</th>
+            <th class="text-right py-2">AIS TDS</th>
+            <th class="text-right py-2">Cresto TDS</th>
+            <th class="text-center py-2">Status</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm">
+          {{range .TDSRecon}}
+          <tr>
+            <td class="py-2">{{.Deductor}}</td>
+            <td class="py-2 text-muted-foreground">{{.Section}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .AISIncome}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .AISTDS}}</td>
+            <td class="text-right py-2 tabular-nums">
+              {{if .HasPayslips}}{{money .CrestoTDS}}{{else}}<span class="text-muted-foreground">—</span>{{end}}
+            </td>
+            <td class="text-center py-2 text-xs">
+              {{if eq .Status "match"}}<span class="text-success">✓ Match</span>
+              {{else if eq .Status "gap"}}<span class="text-destructive">⚠ Gap {{sign .GapAmount}}{{money .GapAmount}}</span>
+              {{else}}<span class="text-muted-foreground">No payslips</span>{{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+  </div>
+  {{end}}
+
+  <!-- Securities sales (AIS SFT-17-LES(M)) -->
+  {{if .Securities}}
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">Securities Sales (AIS SFT-17-LES)</h3>
+      <p class="text-muted-foreground text-sm">Cross-verify with Kite Console Tax P&L (PF-80)</p>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <thead>
+          <tr class="text-xs text-muted-foreground">
+            <th class="text-left py-2">Security</th>
+            <th class="text-right py-2">Sales Consideration</th>
+            <th class="text-right py-2">Cost of Acquisition</th>
+            <th class="text-center py-2">Type</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm">
+          {{range .Securities}}
+          <tr>
+            <td class="py-2 text-xs">{{.SecurityName}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .SalesConsideration}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .CostOfAcquisition}}</td>
+            <td class="text-center py-2 text-xs">{{.Type}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+  </div>
+  {{end}}
+
+  <!-- Advance tax (AIS paymentOfTaxes) -->
+  {{if .AdvanceTax}}
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">Tax Payments (AIS paymentOfTaxes)</h3>
+      <p class="text-muted-foreground text-sm">Advance tax / self-assessment tax</p>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <thead>
+          <tr class="text-xs text-muted-foreground">
+            <th class="text-left py-2">FY</th>
+            <th class="text-left py-2">Head</th>
+            <th class="text-right py-2">Tax</th>
+            <th class="text-right py-2">Total</th>
+            <th class="text-left py-2">Date</th>
+            <th class="text-left py-2">BSR / Challan</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm">
+          {{range .AdvanceTax}}
+          <tr>
+            <td class="py-2 text-muted-foreground">{{.FY}}</td>
+            <td class="py-2 text-xs">{{.MinorHead}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .Tax}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .Total}}</td>
+            <td class="py-2 text-muted-foreground">{{.Date}}</td>
+            <td class="py-2 text-xs font-mono text-muted-foreground">{{.BSRCode}} / {{.Challan}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+  </div>
+  {{end}}
+
+  {{end}}
+</div>
+{{end}}

@@ -56,6 +56,9 @@
         <a href="/portfolio" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors {{if eq .Active "portfolio"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}" data-tooltip="Portfolio" data-side="right" {{if eq .Active "portfolio"}}aria-current="page"{{end}}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
         </a>
+        <a href="/tax" class="rail-item flex items-center justify-center rounded-lg p-2 transition-colors {{if eq .Active "tax"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}" aria-label="Tax" data-tooltip="Tax" data-side="right" {{if eq .Active "tax"}}aria-current="page"{{end}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13s-2 2-4 2-4-2-4-2"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/></svg>
+        </a>
 
         <div class="flex-1 min-h-2"></div>
 

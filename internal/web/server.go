@@ -396,7 +396,7 @@ type Server struct {
 // New wires the server's dependencies but does not start listening. The caller
 // owns the store, LLMClient, and pdfs lifetimes; closing them is the caller's job.
 func New(s *store.Store, client LLMClient, cfg config.Config, pdfs *pdfstore.Store, growwClient *groww.Client, kiteClient *kite.Client, greythrClient *greythr.Client) (*Server, error) {
-	pageNames := []string{"dashboard", "upload", "batch_progress", "payslip_detail", "payslips_list", "component_detail", "annual", "error", "portfolio", "settings", "greythr"}
+	pageNames := []string{"dashboard", "upload", "batch_progress", "payslip_detail", "payslips_list", "component_detail", "annual", "error", "portfolio", "settings", "greythr", "tax"}
 	pages := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {
 		t, err := template.New("").Funcs(tmplFuncs).ParseFS(contentFS,
@@ -517,6 +517,10 @@ func (s *Server) Routes() *http.ServeMux {
 	// Chrome gets a ZIP (download, extract, load unpacked).
 	mux.HandleFunc("GET /greythr/extension.xpi", s.handleGreytHRExtension)
 	mux.HandleFunc("GET /greythr/extension.zip", s.handleExtensionZip)
+
+	// Tax: AIS import + /tax page with TDS reconciliation (PF-79).
+	mux.HandleFunc("GET /tax", s.handleTax)
+	mux.HandleFunc("POST /tax/ais-upload", s.handleTaxAISUpload)
 
 	// Static assets: CSS, JS. fs.Sub scopes the embed to /static.
 	staticFS, err := fs.Sub(contentFS, "static")

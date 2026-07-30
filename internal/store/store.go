@@ -53,31 +53,31 @@ type Canonical struct {
 // UI. User-created canonicals use whatever name the user typed (their Name is
 // already a display label, not a slug), so they aren't listed here.
 var seedDisplayNames = map[string]string{
-	"basic":             "Basic",
-	"hra":               "HRA",
-	"da":                "Dearness Allowance",
-	"conveyance":        "Conveyance",
-	"medical":           "Medical",
-	"lta":               "LTA",
-	"education":         "Education",
-	"telephone":         "Telephone",
-	"special_allowance": "Special Allowance",
-	"bonus":             "Bonus",
-	"arrears":           "Arrears",
-	"leave_encashment":  "Leave Encashment",
-	"other_earnings":          "Other Earnings",
-	"term_insurance_earning":  "Term Insurance",
-	"medical_insurance_earning": "Medical Insurance",
-	"epf":                     "EPF",
-	"professional_tax":  "Professional Tax",
-	"tds":               "TDS",
-	"esi":               "ESI",
-	"lwf":               "LWF",
-	"lop":                     "LOP",
-	"loan_recovery":           "Loan Recovery",
-	"term_insurance_deduction": "Term Insurance",
+	"basic":                       "Basic",
+	"hra":                         "HRA",
+	"da":                          "Dearness Allowance",
+	"conveyance":                  "Conveyance",
+	"medical":                     "Medical",
+	"lta":                         "LTA",
+	"education":                   "Education",
+	"telephone":                   "Telephone",
+	"special_allowance":           "Special Allowance",
+	"bonus":                       "Bonus",
+	"arrears":                     "Arrears",
+	"leave_encashment":            "Leave Encashment",
+	"other_earnings":              "Other Earnings",
+	"term_insurance_earning":      "Term Insurance",
+	"medical_insurance_earning":   "Medical Insurance",
+	"epf":                         "EPF",
+	"professional_tax":            "Professional Tax",
+	"tds":                         "TDS",
+	"esi":                         "ESI",
+	"lwf":                         "LWF",
+	"lop":                         "LOP",
+	"loan_recovery":               "Loan Recovery",
+	"term_insurance_deduction":    "Term Insurance",
 	"medical_insurance_deduction": "Medical Insurance",
-	"other_deductions":       "Other Deductions",
+	"other_deductions":            "Other Deductions",
 }
 
 // DisplayName returns the human-readable label for this canonical. Seed
@@ -1178,15 +1178,15 @@ func (s *Store) GetConfirmedTimeline(ctx context.Context) ([]Payslip, error) {
 	var order []int64
 	for rows.Next() {
 		var (
-			p           Payslip
-			status      string
-			cID         sql.NullInt64
-			cPayslipID  sql.NullInt64
-			cCanonID    sql.NullInt64
-			cRawLabel   sql.NullString
-			cAmount     sql.NullFloat64
-			cYTD        sql.NullFloat64
-			cCategory   sql.NullString
+			p          Payslip
+			status     string
+			cID        sql.NullInt64
+			cPayslipID sql.NullInt64
+			cCanonID   sql.NullInt64
+			cRawLabel  sql.NullString
+			cAmount    sql.NullFloat64
+			cYTD       sql.NullFloat64
+			cCategory  sql.NullString
 		)
 		if err := rows.Scan(
 			&p.ID, &p.EmployerName, &p.PayPeriodMonth, &p.PayPeriodYear,
@@ -1618,4 +1618,155 @@ func (s *Store) SetPrimaryBankAccount(ctx context.Context, id int64) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// AISImport is one per-FY AIS import record. The raw decrypted JSON is
+// stored on disk (raw_json_path) and re-parsed on page load.
+type AISImport struct {
+	ID          int64
+	FYStartYear int
+	RawJSONPath string
+	ImportedAt  string
+}
+
+// SaveAISImport upserts an AIS import for the given FY. If a row already
+// exists for fy_start_year, its path and timestamp are overwritten.
+func (s *Store) SaveAISImport(ctx context.Context, fyStartYear int, rawJSONPath string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO ais_imports (fy_start_year, raw_json_path, imported_at)
+		 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+		 ON CONFLICT(fy_start_year) DO UPDATE SET
+		   raw_json_path = excluded.raw_json_path,
+		   imported_at = excluded.imported_at`,
+		fyStartYear, rawJSONPath)
+	return err
+}
+
+// GetAISImport returns the AIS import for the given FY. Returns ErrNotFound
+// if no import exists for that FY.
+func (s *Store) GetAISImport(ctx context.Context, fyStartYear int) (AISImport, error) {
+	var im AISImport
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, fy_start_year, raw_json_path, imported_at
+		 FROM ais_imports WHERE fy_start_year = ?`, fyStartYear).Scan(
+		&im.ID, &im.FYStartYear, &im.RawJSONPath, &im.ImportedAt)
+	if err == sql.ErrNoRows {
+		return AISImport{}, ErrNotFound
+	}
+	return im, err
+}
+
+// ListAISImports returns all AIS imports ordered by FY descending (most
+// recent first).
+func (s *Store) ListAISImports(ctx context.Context) ([]AISImport, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, fy_start_year, raw_json_path, imported_at
+		 FROM ais_imports ORDER BY fy_start_year DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AISImport
+	for rows.Next() {
+		var im AISImport
+		if err := rows.Scan(&im.ID, &im.FYStartYear, &im.RawJSONPath, &im.ImportedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, im)
+	}
+	return out, rows.Err()
+}
+
+// EmployerTDS is the total TDS and gross salary per employer for a FY,
+// summed from confirmed payslip components. Used for TDS reconciliation
+// against AIS data.
+type EmployerTDS struct {
+	EmployerName string
+	GrossSalary  float64
+	TDS          float64
+	PayslipCount int
+}
+
+// GetFYEmployerTDS returns per-employer gross salary and TDS for the FY,
+// summed from confirmed payslips. TDS is the absolute value of the 'tds'
+// canonical component sum (stored as a negative deduction). PayslipCount
+// is the number of confirmed payslips for that employer in the FY.
+func (s *Store) GetFYEmployerTDS(ctx context.Context, fyStartYear int) ([]EmployerTDS, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT employer_name,
+		       SUM(gross_salary) AS gross_salary,
+		       COUNT(*) AS payslip_count
+		FROM payslips
+		WHERE status = 'confirmed'
+		  AND (
+		        (pay_period_year = ?   AND pay_period_month >= 4)
+		     OR (pay_period_year = ?+1 AND pay_period_month <= 3)
+		  )
+		GROUP BY employer_name
+		ORDER BY employer_name`,
+		fyStartYear, fyStartYear)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type base struct {
+		name  string
+		gross float64
+		count int
+	}
+	employers := map[string]*base{}
+	var order []string
+	for rows.Next() {
+		var b base
+		if err := rows.Scan(&b.name, &b.gross, &b.count); err != nil {
+			return nil, err
+		}
+		employers[b.name] = &b
+		order = append(order, b.name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	tdsRows, err := s.db.QueryContext(ctx, `
+		SELECT p.employer_name, ABS(SUM(c.amount)) AS tds
+		FROM payslips p
+		JOIN payslip_components c ON c.payslip_id = p.id
+		WHERE p.status = 'confirmed'
+		  AND c.canonical_id = (SELECT id FROM canonicals WHERE name = 'tds')
+		  AND (
+		        (p.pay_period_year = ?   AND p.pay_period_month >= 4)
+		     OR (p.pay_period_year = ?+1 AND p.pay_period_month <= 3)
+		  )
+		GROUP BY p.employer_name`,
+		fyStartYear, fyStartYear)
+	if err != nil {
+		return nil, err
+	}
+	defer tdsRows.Close()
+	tdsByEmp := map[string]float64{}
+	for tdsRows.Next() {
+		var name string
+		var tds float64
+		if err := tdsRows.Scan(&name, &tds); err != nil {
+			return nil, err
+		}
+		tdsByEmp[name] = tds
+	}
+	if err := tdsRows.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make([]EmployerTDS, 0, len(order))
+	for _, name := range order {
+		b := employers[name]
+		out = append(out, EmployerTDS{
+			EmployerName: b.name,
+			GrossSalary:  b.gross,
+			TDS:          tdsByEmp[name],
+			PayslipCount: b.count,
+		})
+	}
+	return out, nil
 }
