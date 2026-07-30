@@ -45,39 +45,36 @@
     </div>
 
     {{else if .Expired}}
-    <!-- ═══ Connected but session expired ═══ -->
+    <!-- ═══ Connected but session expired — unified recovery box ═══ -->
     <div class="rounded-lg border border-warning/30 bg-warning/5 p-4 space-y-3">
       <div class="flex items-center gap-2">
         <svg class="text-warning" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
         <div class="font-medium">Session expired</div>
       </div>
-      <p class="text-sm text-muted-foreground">Your greytHR session has expired. Reconnect using the extension or manual setup below.</p>
-    </div>
 
-    <!-- Extension re-connect guidance -->
-    <div id="ext-installed" class="rounded-lg border border-success/30 bg-success/5 p-4 space-y-2" style="display:none">
-      <div class="flex items-center gap-2">
-        <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        <div class="font-medium text-sm">Extension installed — reconnect in one click</div>
-      </div>
-      <ol class="list-decimal list-inside text-xs text-muted-foreground space-y-1">
-        <li>Open your greytHR ESS portal and log in{{if .Host}} — <a href="https://{{.Host}}" class="underline text-foreground" target="_blank" rel="noopener">{{.Host}} ↗</a>{{end}}</li>
-        <li>Click the Cresto extension icon in your toolbar</li>
-        <li>Click Connect — your session refreshes automatically</li>
-      </ol>
-    </div>
-
-    <!-- Install extension (if not installed) -->
-    <div id="ext-install" class="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3" style="display:none">
-      <div class="font-medium text-sm">Reconnect with browser extension</div>
-      <div id="ext-firefox" class="space-y-2" style="display:none">
-        <a href="/greythr/extension.xpi" class="btn" data-variant="outline" data-size="sm">Install Extension</a>
-      </div>
-      <div id="ext-chrome" class="space-y-2" style="display:none">
-        <ol class="list-decimal list-inside text-xs text-muted-foreground space-y-1">
-          <li>Go to <code class="bg-muted px-1 py-0.5 rounded">chrome://extensions/</code></li>
-          <li>Enable Developer mode → Load unpacked → select <code class="bg-muted px-1 py-0.5 rounded">extension/</code></li>
+      <!-- Extension installed: quick reconnect steps -->
+      <div id="ext-installed" class="space-y-2" style="display:none">
+        <ol class="list-decimal list-inside text-sm text-muted-foreground space-y-1">
+          <li>{{if .Host}}<a href="https://{{.Host}}/uas/portal/auth/login" class="underline text-foreground" target="_blank" rel="noopener">Log into {{.Host}} ↗</a>{{else}}Log into your greytHR portal{{end}}</li>
+          <li>Click the Cresto extension icon in your toolbar</li>
+          <li>Click Connect — your session refreshes automatically</li>
         </ol>
+      </div>
+
+      <!-- Extension not installed: install path -->
+      <div id="ext-install" class="space-y-3" style="display:none">
+        <p class="text-sm text-muted-foreground">Install the Cresto extension for one-click reconnect after logging in.</p>
+        <div id="ext-firefox" class="space-y-2" style="display:none">
+          <a href="/greythr/extension.xpi" class="btn" data-variant="outline" data-size="sm">Install Extension</a>
+        </div>
+        <div id="ext-chrome" class="space-y-2" style="display:none">
+          <ol class="list-decimal list-inside text-xs text-muted-foreground space-y-1">
+            <li><a href="/greythr/extension.zip" class="underline text-foreground">Download extension ZIP ↗</a></li>
+            <li>Extract the ZIP to a folder</li>
+            <li>Go to <code class="bg-muted px-1 py-0.5 rounded cursor-pointer select-all" onclick="navigator.clipboard.writeText('chrome://extensions/')">chrome://extensions/</code> <span class="text-muted-foreground">(click to copy)</span></li>
+            <li>Enable Developer mode (top-right) → Load unpacked → select the extracted folder</li>
+          </ol>
+        </div>
       </div>
     </div>
 
@@ -132,9 +129,10 @@
       <div id="ext-chrome" class="space-y-2" style="display:none">
         <div class="text-sm font-medium">Chrome</div>
         <ol class="list-decimal list-inside text-xs text-muted-foreground space-y-1">
-          <li>Go to <code class="bg-muted px-1 py-0.5 rounded">chrome://extensions/</code></li>
-          <li>Enable Developer mode (top-right toggle)</li>
-          <li>Click "Load unpacked" and select the <code class="bg-muted px-1 py-0.5 rounded">extension/</code> folder from the Cresto repo</li>
+          <li><a href="/greythr/extension.zip" class="underline text-foreground">Download extension ZIP ↗</a></li>
+          <li>Extract the ZIP to a folder</li>
+          <li>Go to <code class="bg-muted px-1 py-0.5 rounded cursor-pointer select-all" onclick="navigator.clipboard.writeText('chrome://extensions/')">chrome://extensions/</code> <span class="text-muted-foreground">(click to copy)</span></li>
+          <li>Enable Developer mode (top-right) → Load unpacked → select the extracted folder</li>
         </ol>
       </div>
       <div class="border-t pt-3">
@@ -241,7 +239,7 @@
           observer.disconnect();
           showInstallInstructions();
         }
-      }, 5000);
+      }, 1000);
     }
   })();
 </script>
