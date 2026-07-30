@@ -726,6 +726,49 @@ func (s *Store) ConfirmPayslip(ctx context.Context, id int64) error {
 	return nil
 }
 
+// ConfirmPayslipsByStatus confirms every payslip with the given status.
+// Returns the count of payslips confirmed. Empty status is rejected.
+func (s *Store) ConfirmPayslipsByStatus(ctx context.Context, status Status) (int, error) {
+	if status == "" {
+		return 0, errors.New("store: ConfirmPayslipsByStatus requires non-empty status")
+	}
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE payslips
+		   SET status = 'confirmed', confirmed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+		       error_message = ''
+		 WHERE status = ?`, string(status))
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
+// ConfirmPayslipsByIDs confirms the payslips with the given IDs. Non-pending
+// payslips are unaffected (the UPDATE sets status='confirmed' regardless, but
+// callers should only pass pending_review IDs for meaningful results). Returns
+// the count of payslips confirmed. Empty IDs is rejected.
+func (s *Store) ConfirmPayslipsByIDs(ctx context.Context, ids []int64) (int, error) {
+	if len(ids) == 0 {
+		return 0, errors.New("store: ConfirmPayslipsByIDs requires at least one ID")
+	}
+	placeholders := strings.Repeat("?,", len(ids)-1) + "?"
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	res, err := s.db.ExecContext(ctx,
+		fmt.Sprintf(`UPDATE payslips
+		   SET status = 'confirmed', confirmed_at = strftime('%%Y-%%m-%%dT%%H:%%M:%%SZ', 'now'),
+		       error_message = ''
+		 WHERE id IN (%s)`, placeholders), args...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
 // DeletePayslip hard-deletes a payslip row. Components are removed by the
 // schema's ON DELETE CASCADE constraint. Does NOT touch the PDF file on disk —
 // file lifecycle is the handler's job, the store owns data only. Returns
@@ -806,6 +849,44 @@ func (s *Store) DeletePayslipsByEmployer(ctx context.Context, employer string) (
 	}
 	if _, err := s.db.ExecContext(ctx,
 		`DELETE FROM payslips WHERE employer_name = ?`, employer); err != nil {
+		return nil, err
+	}
+	return deleted, nil
+}
+
+// DeletePayslipsByIDs hard-deletes the payslips with the given IDs. Components
+// are removed by ON DELETE CASCADE. Returns the deleted payslips (with
+// RawPDFPath populated) so the caller can clean up PDF files on disk.
+// Empty IDs is rejected.
+func (s *Store) DeletePayslipsByIDs(ctx context.Context, ids []int64) ([]Payslip, error) {
+	if len(ids) == 0 {
+		return nil, errors.New("store: DeletePayslipsByIDs requires at least one ID")
+	}
+	placeholders := strings.Repeat("?,", len(ids)-1) + "?"
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx,
+		fmt.Sprintf("SELECT id, raw_pdf_path FROM payslips WHERE id IN (%s)", placeholders), args...)
+	if err != nil {
+		return nil, err
+	}
+	var deleted []Payslip
+	for rows.Next() {
+		var p Payslip
+		if err := rows.Scan(&p.ID, &p.RawPDFPath); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		deleted = append(deleted, p)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if _, err := s.db.ExecContext(ctx,
+		fmt.Sprintf("DELETE FROM payslips WHERE id IN (%s)", placeholders), args...); err != nil {
 		return nil, err
 	}
 	return deleted, nil

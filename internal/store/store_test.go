@@ -321,6 +321,94 @@ func TestDeletePayslip_NotFound(t *testing.T) {
 	}
 }
 
+func TestDeletePayslipsByIDs(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	p1 := samplePayslip(t, st, 1, 2026, "Google")
+	st.SavePayslip(ctx, &p1)
+	p2 := samplePayslip(t, st, 2, 2026, "Google")
+	st.SavePayslip(ctx, &p2)
+	p3 := samplePayslip(t, st, 3, 2026, "Google")
+	st.SavePayslip(ctx, &p3)
+
+	deleted, err := st.DeletePayslipsByIDs(ctx, []int64{p1.ID, p3.ID})
+	if err != nil {
+		t.Fatalf("DeletePayslipsByIDs: %v", err)
+	}
+	if len(deleted) != 2 {
+		t.Fatalf("deleted = %d, want 2", len(deleted))
+	}
+	for _, p := range deleted {
+		if p.RawPDFPath == "" {
+			t.Errorf("deleted payslip %d: RawPDFPath empty", p.ID)
+		}
+	}
+	if _, err := st.GetPayslip(ctx, p2.ID); err != nil {
+		t.Errorf("p2 should still exist: %v", err)
+	}
+	if _, err := st.GetPayslip(ctx, p1.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("p1 should be deleted: %v", err)
+	}
+}
+
+func TestDeletePayslipsByIDs_Empty(t *testing.T) {
+	st := newTestStore(t)
+	if _, err := st.DeletePayslipsByIDs(context.Background(), nil); err == nil {
+		t.Error("want error for empty IDs, got nil")
+	}
+}
+
+func TestConfirmPayslipsByStatus(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	p1 := samplePayslip(t, st, 1, 2026, "Google")
+	st.SavePayslip(ctx, &p1)
+	p2 := samplePayslip(t, st, 2, 2026, "Google")
+	st.SavePayslip(ctx, &p2)
+
+	n, err := st.ConfirmPayslipsByStatus(ctx, StatusPendingReview)
+	if err != nil {
+		t.Fatalf("ConfirmPayslipsByStatus: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("confirmed = %d, want 2", n)
+	}
+	got, _ := st.GetPayslip(ctx, p1.ID)
+	if got.Status != StatusConfirmed {
+		t.Errorf("p1 status = %q, want confirmed", got.Status)
+	}
+}
+
+func TestConfirmPayslipsByIDs(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	p1 := samplePayslip(t, st, 1, 2026, "Google")
+	st.SavePayslip(ctx, &p1)
+	p2 := samplePayslip(t, st, 2, 2026, "Google")
+	st.SavePayslip(ctx, &p2)
+	p3 := samplePayslip(t, st, 3, 2026, "Google")
+	st.SavePayslip(ctx, &p3)
+
+	n, err := st.ConfirmPayslipsByIDs(ctx, []int64{p1.ID, p3.ID})
+	if err != nil {
+		t.Fatalf("ConfirmPayslipsByIDs: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("confirmed = %d, want 2", n)
+	}
+	got, _ := st.GetPayslip(ctx, p2.ID)
+	if got.Status != StatusPendingReview {
+		t.Errorf("p2 status = %q, want pending_review", got.Status)
+	}
+}
+
+func TestConfirmPayslipsByIDs_Empty(t *testing.T) {
+	st := newTestStore(t)
+	if _, err := st.ConfirmPayslipsByIDs(context.Background(), nil); err == nil {
+		t.Error("want error for empty IDs, got nil")
+	}
+}
+
 func TestGetIncomeTimeline_ConfirmedOnly(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()

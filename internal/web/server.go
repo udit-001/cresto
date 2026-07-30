@@ -476,8 +476,11 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("POST /payslip/{id}", s.handleReviewSubmit)
 	mux.HandleFunc("GET /payslip/{id}/skip", s.handleReviewSkip)
 	mux.HandleFunc("POST /payslip/{id}/retry", s.handleRetry)
-	mux.HandleFunc("POST /payslip/{id}/delete", s.handleDeletePayslip)
-	mux.HandleFunc("POST /payslips/delete-failed", s.handleDeleteFailed)
+ 	mux.HandleFunc("POST /payslip/{id}/delete", s.handleDeletePayslip)
+	mux.HandleFunc("POST /payslips/delete-all", s.handleDeleteAll)
+	mux.HandleFunc("POST /payslips/confirm-all", s.handleConfirmAll)
+	mux.HandleFunc("POST /payslips/bulk-delete", s.handleBulkDelete)
+	mux.HandleFunc("POST /payslips/bulk-confirm", s.handleBulkConfirm)
 	mux.HandleFunc("GET /component/{id}", s.handleComponentDetail)
 	mux.HandleFunc("GET /annual", s.handleAnnual)
 	mux.HandleFunc("GET /pdf/{id}", s.handleServePDF)
@@ -968,15 +971,19 @@ func (s *Server) handleDeletePayslip(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/payslips?toast=Deleted&variant=success", http.StatusSeeOther)
 }
 
-// handleDeleteFailed removes every failed payslip (DB rows + PDFs on disk).
-// Used by the "Delete all failed" affordance on the payslips list when the
-// Failed filter is active. Always deletes by status — it is not scoped to
-// the current employer/period filter, so the confirmation copy says "all".
-func (s *Server) handleDeleteFailed(w http.ResponseWriter, r *http.Request) {
+// handleDeleteAll deletes every payslip with the given status. Used by the
+// "Delete all N [status]" button on the payslips list. The status must be
+// pending_review or failed — confirmed payslips cannot be bulk-deleted.
+func (s *Server) handleDeleteAll(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	deleted, err := s.store.DeletePayslipsByStatus(ctx, store.StatusFailed)
+	status := r.FormValue("status")
+	if status != string(store.StatusPendingReview) && status != string(store.StatusFailed) {
+		s.renderError(w, http.StatusBadRequest, "Invalid status for bulk delete.")
+		return
+	}
+	deleted, err := s.store.DeletePayslipsByStatus(ctx, store.Status(status))
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, "Could not delete failed payslips: "+err.Error())
+		s.renderError(w, http.StatusInternalServerError, "Could not delete payslips: "+err.Error())
 		return
 	}
 	for _, p := range deleted {
@@ -985,7 +992,65 @@ func (s *Server) handleDeleteFailed(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	n := len(deleted)
-	http.Redirect(w, r, fmt.Sprintf("/payslips?toast=Deleted+%d+failed+payslips&variant=success", n), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/payslips?status=%s&toast=Deleted+%d+payslips&variant=success", status, n), http.StatusSeeOther)
+}
+
+// handleConfirmAll confirms every payslip with the given status. Only
+// pending_review is accepted — used by the "Confirm all N pending" button.
+func (s *Server) handleConfirmAll(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	status := r.FormValue("status")
+	if status != string(store.StatusPendingReview) {
+		s.renderError(w, http.StatusBadRequest, "Can only confirm pending payslips.")
+		return
+	}
+	n, err := s.store.ConfirmPayslipsByStatus(ctx, store.Status(status))
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, "Could not confirm payslips: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/payslips?status=%s&toast=Confirmed+%d+payslips&variant=success", status, n), http.StatusSeeOther)
+}
+
+// handleBulkDelete deletes the payslips selected via checkboxes. IDs are
+// passed as a comma-separated hidden form field. Used by the action bar.
+func (s *Server) handleBulkDelete(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ids := parseIDs(r.FormValue("ids"))
+	if len(ids) == 0 {
+		s.renderError(w, http.StatusBadRequest, "No payslips selected.")
+		return
+	}
+	deleted, err := s.store.DeletePayslipsByIDs(ctx, ids)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, "Could not delete payslips: "+err.Error())
+		return
+	}
+	for _, p := range deleted {
+		if p.RawPDFPath != "" && s.pdfs.Exists(p.RawPDFPath) {
+			_ = os.Remove(s.pdfs.Abs(p.RawPDFPath))
+		}
+	}
+	status := r.FormValue("status")
+	http.Redirect(w, r, fmt.Sprintf("/payslips?status=%s&toast=Deleted+%d+payslips&variant=success", status, len(deleted)), http.StatusSeeOther)
+}
+
+// handleBulkConfirm confirms the payslips selected via checkboxes. Used by the
+// action bar "Confirm N selected" button.
+func (s *Server) handleBulkConfirm(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ids := parseIDs(r.FormValue("ids"))
+	if len(ids) == 0 {
+		s.renderError(w, http.StatusBadRequest, "No payslips selected.")
+		return
+	}
+	n, err := s.store.ConfirmPayslipsByIDs(ctx, ids)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, "Could not confirm payslips: "+err.Error())
+		return
+	}
+	status := r.FormValue("status")
+	http.Redirect(w, r, fmt.Sprintf("/payslips?status=%s&toast=Confirmed+%d+payslips&variant=success", status, n), http.StatusSeeOther)
 }
 
 // handleRetry re-processes a single failed payslip. Marks it processing (so the
@@ -1399,6 +1464,25 @@ func parseID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// parseIDs splits a comma-separated string of payslip IDs into []int64.
+// Empty/malformed entries are silently skipped.
+func parseIDs(s string) []int64 {
+	parts := strings.Split(s, ",")
+	ids := make([]int64, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		id, err := strconv.ParseInt(p, 10, 64)
+		if err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func atoiOr(s string, fallback int) int {

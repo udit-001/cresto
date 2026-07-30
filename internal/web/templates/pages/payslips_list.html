@@ -1,5 +1,8 @@
 {{define "page"}}
 {{$filter := .StatusFilter}}
+{{$activeCount := 0}}
+{{if eq $filter "pending_review"}}{{$activeCount = .CountPending}}{{end}}
+{{if eq $filter "failed"}}{{$activeCount = .CountFailed}}{{end}}
 
 {{if not .CountAll}}
   <section class="empty">
@@ -25,9 +28,14 @@
     <a href="/payslips?status=failed{{if .EmployerFilter}}&amp;employer={{urlquery .EmployerFilter}}{{end}}" class="rounded-full px-2.5 py-0.5 text-xs transition-colors {{if eq $filter "failed"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}">
       Failed <span class="ml-1 opacity-70">({{.CountFailed}})</span>
     </a>
-    {{if and (eq $filter "failed") (gt .CountFailed 0)}}
-      <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('delete-failed-dialog').showModal()">
-        Delete all failed
+    {{if and (eq $filter "pending_review") (gt .CountPending 0)}}
+      <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('confirm-all-dialog').showModal()">
+        Confirm all {{.CountPending}}
+      </button>
+    {{end}}
+    {{if and (or (eq $filter "pending_review") (eq $filter "failed")) (gt $activeCount 0)}}
+      <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('delete-all-dialog').showModal()">
+        Delete all {{$activeCount}}
       </button>
     {{end}}
 
@@ -130,12 +138,22 @@
       </header>
     </section>
   {{else}}
+    <div class="flex items-center gap-2 mb-4">
+      <div role="group" class="field" data-orientation="horizontal">
+        <input type="checkbox" id="select-all" class="input" onchange="selectAll(this.checked)">
+        <label for="select-all" class="text-sm text-muted-foreground">Select all</label>
+      </div>
+    </div>
+
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {{range .Payslips}}
         {{$period := periodLabel .PayPeriodMonth .PayPeriodYear}}
         <article class="card flex flex-col cursor-pointer hover:border-foreground/30 transition-colors" onclick="window.location='/payslip/{{.ID}}'">
           <header class="flex items-start justify-between gap-2">
-            <a href="/payslip/{{.ID}}" class="font-semibold tracking-tight hover:underline" onclick="event.stopPropagation()">{{$period}}</a>
+            <div class="flex items-center gap-2">
+              <input type="checkbox" class="input payslip-checkbox" value="{{.ID}}" onclick="event.stopPropagation()" onchange="toggleSelect({{.ID}}, this.checked)">
+              <a href="/payslip/{{.ID}}" class="font-semibold tracking-tight hover:underline" onclick="event.stopPropagation()">{{$period}}</a>
+            </div>
             {{if eq .Status "confirmed"}}<span class="badge bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300">Confirmed</span>
             {{else if eq .Status "failed"}}<span class="badge bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300">Failed</span>
             {{else if eq .Status "processing"}}<span class="badge bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">Processing</span>
@@ -197,22 +215,174 @@
   })();
 </script>
 
-{{if and (eq $filter "failed") (gt .CountFailed 0)}}
-<dialog class="alert-dialog" id="delete-failed-dialog" aria-labelledby="delete-failed-title" aria-describedby="delete-failed-desc">
+{{if and (or (eq $filter "pending_review") (eq $filter "failed")) (gt $activeCount 0)}}
+<dialog class="alert-dialog" id="delete-all-dialog">
   <div>
     <header>
-      <h2 id="delete-failed-title">Delete {{.CountFailed}} failed payslips?</h2>
-      <p id="delete-failed-desc">This permanently removes {{.CountFailed}} payslips and their PDFs. This cannot be undone.</p>
+      <h2>Delete all {{$activeCount}} payslips?</h2>
+      <p>This permanently removes {{$activeCount}} payslips and their PDFs. This cannot be undone.</p>
     </header>
     <footer>
       <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
-      <form method="POST" action="/payslips/delete-failed">
-        <button type="submit" class="btn" data-variant="destructive">Delete {{.CountFailed}} payslips</button>
+      <form method="POST" action="/payslips/delete-all">
+        <input type="hidden" name="status" value="{{$filter}}">
+        <button type="submit" class="btn" data-variant="destructive">Delete {{$activeCount}} payslips</button>
       </form>
     </footer>
   </div>
 </dialog>
 {{end}}
+
+{{if and (eq $filter "pending_review") (gt .CountPending 0)}}
+<dialog class="alert-dialog" id="confirm-all-dialog">
+  <div>
+    <header>
+      <h2>Confirm all {{.CountPending}} pending payslips?</h2>
+      <p>This marks {{.CountPending}} payslips as confirmed without individual review. This cannot be undone.</p>
+    </header>
+    <footer>
+      <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
+      <form method="POST" action="/payslips/confirm-all">
+        <input type="hidden" name="status" value="pending_review">
+        <button type="submit" class="btn">Confirm {{.CountPending}} payslips</button>
+      </form>
+    </footer>
+  </div>
+</dialog>
+{{end}}
+
+<dialog class="alert-dialog" id="bulk-delete-dialog">
+  <div>
+    <header>
+      <h2>Delete <span id="bulk-delete-count">0</span> payslips?</h2>
+      <p>This permanently removes the selected payslips and their PDFs. This cannot be undone.</p>
+    </header>
+    <footer>
+      <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
+      <form method="POST" action="/payslips/bulk-delete">
+        <input type="hidden" name="ids" id="bulk-delete-ids" value="">
+        <input type="hidden" name="status" value="{{$filter}}">
+        <button type="submit" class="btn" data-variant="destructive">Delete</button>
+      </form>
+    </footer>
+  </div>
+</dialog>
+
+<dialog class="alert-dialog" id="bulk-confirm-dialog">
+  <div>
+    <header>
+      <h2>Confirm <span id="bulk-confirm-count">0</span> payslips?</h2>
+      <p>This marks the selected payslips as confirmed without individual review.</p>
+    </header>
+    <footer>
+      <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
+      <form method="POST" action="/payslips/bulk-confirm">
+        <input type="hidden" name="ids" id="bulk-confirm-ids" value="">
+        <input type="hidden" name="status" value="{{$filter}}">
+        <button type="submit" class="btn">Confirm</button>
+      </form>
+    </footer>
+  </div>
+</dialog>
+
+<div id="bulk-action-bar" class="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 backdrop-blur transition-transform duration-200 translate-y-full">
+  <div class="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between gap-4">
+    <span class="text-sm font-medium"><span id="bulk-count">0</span> selected</span>
+    <div class="flex items-center gap-2">
+      <button type="button" class="btn" data-variant="outline" data-size="sm" onclick="openBulkConfirm()">
+        Confirm
+      </button>
+      <button type="button" class="btn" data-variant="destructive" data-size="sm" onclick="openBulkDelete()">
+        Delete
+      </button>
+      <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="clearSelection()">
+        Clear
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const STORAGE_KEY = 'payslip-selected-ids';
+    let selectedIds = new Set(JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '[]'));
+
+    function saveSelection() {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...selectedIds]));
+    }
+
+    function updateBar() {
+      const count = selectedIds.size;
+      document.getElementById('bulk-count').textContent = count;
+      const bar = document.getElementById('bulk-action-bar');
+      bar.classList.toggle('translate-y-full', count === 0);
+    }
+
+    function updateSelectAll() {
+      const checkboxes = document.querySelectorAll('.payslip-checkbox');
+      const master = document.getElementById('select-all');
+      if (!master || checkboxes.length === 0) return;
+      const checked = [...checkboxes].filter(cb => cb.checked).length;
+      master.checked = checked === checkboxes.length && checked > 0;
+      master.indeterminate = checked > 0 && checked < checkboxes.length;
+    }
+
+    window.toggleSelect = function(id, checked) {
+      if (checked) selectedIds.add(id);
+      else selectedIds.delete(id);
+      saveSelection();
+      updateBar();
+      updateSelectAll();
+    };
+
+    window.selectAll = function(checked) {
+      document.querySelectorAll('.payslip-checkbox').forEach(cb => {
+        cb.checked = checked;
+        const id = parseInt(cb.value);
+        if (checked) selectedIds.add(id);
+        else selectedIds.delete(id);
+      });
+      saveSelection();
+      updateBar();
+    };
+
+    window.clearSelection = function() {
+      selectedIds.clear();
+      saveSelection();
+      document.querySelectorAll('.payslip-checkbox').forEach(cb => cb.checked = false);
+      updateBar();
+    };
+
+    window.openBulkDelete = function() {
+      const ids = [...selectedIds];
+      document.getElementById('bulk-delete-ids').value = ids.join(',');
+      document.getElementById('bulk-delete-count').textContent = ids.length;
+      document.getElementById('bulk-delete-dialog').showModal();
+    };
+
+    window.openBulkConfirm = function() {
+      const ids = [...selectedIds];
+      document.getElementById('bulk-confirm-ids').value = ids.join(',');
+      document.getElementById('bulk-confirm-count').textContent = ids.length;
+      document.getElementById('bulk-confirm-dialog').showModal();
+    };
+
+    // Clear selection after a bulk operation — the redirect includes a toast
+    // param, so its presence means an action just completed.
+    if (new URLSearchParams(location.search).has('toast')) {
+      sessionStorage.removeItem(STORAGE_KEY);
+      selectedIds = new Set();
+    }
+
+    // Restore checkbox state from sessionStorage on page load.
+    document.querySelectorAll('.payslip-checkbox').forEach(cb => {
+      cb.checked = selectedIds.has(parseInt(cb.value));
+    });
+
+    updateBar();
+    updateSelectAll();
+  })();
+</script>
 
 <dialog id="pdf-preview-dialog" class="dialog" aria-labelledby="pdf-preview-title">
   <div class="flex flex-col gap-0 h-[85vh] w-[min(90vw,800px)]">
