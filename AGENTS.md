@@ -27,10 +27,14 @@ make migrate-down # roll back the most recent migration
 make migrate-status  # show migration version
 make migrate-create name=<desc>  # create a new migration file (needs goose CLI)
 make goose-install   # install goose CLI binary (for migrate-create only)
+make package-extension          # package browser extension for Firefox + Chrome
+make package-extension-firefox  # Firefox only (needs AMO creds in .env)
+make package-extension-chrome   # Chrome only (no creds needed)
 go build -o ~/go/bin/cresto .   # install binary to PATH
 ```
 
 Data lives at `~/.cresto/` (income.db + payslips/ + groww_token.json + kite_session.json + greythr_session.json).
+AMO credentials for Firefox extension signing live in `.env` (gitignored).
 PID file at `~/.config/cresto/server.pid`, daemon logs at `~/.cresto/server.log`.
 
 ## Server commands
@@ -45,6 +49,7 @@ internal/
   store/           # SQLite persistence: migrations, queries, Filter struct
     migrations/    # Goose versioned SQL migrations (embedded)  
   web/             # HTTP server, handlers, templates, static assets
+    extension/     # Packaged extension artifacts (XPI + ZIP), embedded via //go:embed
   llm/             # LLM vision client for PDF extraction
   config/          # Config struct, defaults
   pdfstore/        # PDF file storage
@@ -54,6 +59,7 @@ internal/
   groww/           # Groww broker adapter (OAuth + holdings)
   kite/            # Kite/Zerodha broker adapter (session auth + holdings/MF/trades)
   greythr/         # greytHR ESS adapter (cookie auth + JSON payslip data)
+extension/         # Browser extension source (edit here, package via make)
 ```
 
 ## Template gotchas
@@ -134,7 +140,7 @@ Cresto connects to Groww and Zerodha (Kite) via their free MCP servers for live 
 - **No historical trades**: Kite MCP's `get_trades` returns today only. Kite Connect API also lacks historical trades. Tax filing requires manual Console export.
 - **No MF on Groww**: Groww MCP's `get_mutualfund_details` is a stub.
 - **Groww token expires daily**: reconnect via web UI (`/groww` → Connect).
-- **Kite session can become invalid**: reconnect via web UI (`/kite` → Connect).
+- **Kite session can become invalid**: detected on next fetch (returns "Invalid session ID" or "Please log in first"). The session file is marked expired — settings and portfolio show "Session expired" with a Reconnect button. The extension auto-redirects back to Cresto after Kite auth completes.
 - Broker connections happen through the web UI, not CLI. The CLI reads the saved token/session files.
 
 ## greytHR payslip auto-fetch
@@ -143,17 +149,21 @@ Cresto fetches payslips from greytHR's Employee Self Service (ESS) portal using 
 
 ### Architecture
 
-- `internal/greythr/` — ESS adapter. Cookie auth (user pastes `access_token` from browser DevTools). Three API calls:
+- `internal/greythr/` — ESS adapter. Cookie auth (user pastes `access_token` from browser DevTools, or the extension automates this). API calls:
   - `ListPayslipMonths` → `GET /v3/api/payroll/months/{profile_id}/published?type=payslip` — list of released payslip periods
   - `FetchPayslipData` → `GET /v3/api/payroll/payslip/{profile_id}/{payslip_id}/published` — **full structured payslip data as JSON** (earnings, deductions, net pay, all hierarchical)
   - `DownloadPayslipPDF` → `GET /v3/api/payroll/payslip/{profile_id}/{payslip_id}/download` — PDF for archival
-- `greythr.MapToPayslip` converts the JSON response directly to `store.Payslip` — bypasses the render → LLM extract → classify pipeline entirely. Uses a direct name→canonical map (e.g. `BASIC` → `basic`, `PF` → `epf`) with keyword fallback.
+  - `FetchEmployeeInfo` → `GET /core-hr/v1/empandjob/data/{id}` + `GET /v3/api/empinfo/personal/data/{id}` — designation + employee number
+  - `FetchYTDSummary` → `GET /v3/api/payroll/ytd-statement-summary/{id}/{fy_year}/0` — per-FY YTD data; `YTDForMonth(month)` sums Apr→target month in FY order
+- `greythr.MapToPayslip` converts the JSON response directly to `store.Payslip` — bypasses the render → LLM extract → classify pipeline entirely. Uses a direct name→canonical map (e.g. `BASIC` → `basic`, `PF` → `epf`) with keyword fallback. YTD amounts are set on components from the `ytd` map.
+- `greythr.FYYearFor(month, year)` returns the Indian FY start year (Apr→Mar).
 - Session at `~/.cresto/greythr_session.json` (0600 perms): host, access_token, profile_id, email.
 - PDFs saved with subdomain prefix (e.g. `gyansys_Payslip_Jun_2026.pdf`) for multi-employer disambiguation.
 
 ### Web UI
 
-- `/greythr` — connect (paste host + access_token + profile_id), disconnect, list available months, fetch button
+- `/greythr` — connect (paste host + access_token + profile_id, or use the browser extension), disconnect, list available months, fetch button
+- `/upload` — greytHR fetch card alongside PDF upload (connected → fetch button; not connected → connect link)
 - `/settings` — greytHR connection status card with link to `/greythr`
 - Fetch runs as a background batch (same `upload_batches` table + progress page as PDF uploads). Payslips enter as `pending_review`.
 
@@ -164,6 +174,22 @@ Cresto fetches payslips from greytHR's Employee Self Service (ESS) portal using 
 ### Limitations
 
 - **Cookie expires**: greytHR sessions are short-lived (Ory Kratos tokens). Reconnect via web UI (`/greythr` → paste new token).
-- **Manual cookie extraction**: one-time setup requires copying the `access_token` cookie from browser DevTools. Profile ID must be found in network requests.
 - **Reverse-engineered API**: uses greytHR's internal ESS endpoints, not the official admin API. Could change with greytHR updates.
 - **Single profile**: one greytHR account per Cresto instance (one session file).
+
+## Browser extension
+
+The extension (`extension/`) automates setup for both greytHR and Kite. Packaged artifacts (XPI for Firefox, ZIP for Chrome) are embedded in the binary via `//go:embed extension` and served from `internal/web/extension/`.
+
+### What it does
+
+- **greytHR**: reads the `access_token` cookie from the greytHR ESS portal, extracts `profile_id` from performance entries, and sends both to Cresto via `/greythr/connect` — no manual DevTools cookie extraction needed.
+- **Kite**: content script on `mcp.kite.trade/callback` detects `status=success` and redirects back to `/portfolio` — closes the dead-end in Kite's auth flow (no callback listener).
+- **Detection**: content script on `localhost` injects a DOM marker so the `/greythr` page can detect whether the extension is installed (1-second timeout, then shows install instructions).
+
+### Packaging
+
+- `make package-extension` — packages both Firefox (XPI via AMO signing) and Chrome (ZIP). Run after any `extension/` change.
+- Firefox needs AMO credentials in `.env` (`AMO_KEY`, `AMO_SECRET`). Chrome needs nothing.
+- Routes: `/greythr/extension.xpi` (Firefox), `/greythr/extension.zip` (Chrome).
+- Rebuild the binary after packaging — the artifacts are embedded, not served from disk.
