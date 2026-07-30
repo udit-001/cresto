@@ -86,3 +86,33 @@ btn.addEventListener("click", async () => {
     btn.disabled = false;
   }
 });
+
+// Check if Cresto is running and if the active tab is a greytHR page.
+(function checkState() {
+  var crestoOk = false;
+  var greythrOk = false;
+
+  function recheck() {
+    if (!crestoOk) return;
+    if (!greythrOk) {
+      showStatus("Open your greytHR ESS portal first.", false);
+      btn.disabled = true;
+    } else {
+      btn.disabled = false;
+    }
+  }
+
+  // Check Cresto.
+  fetch(CRESTO_URL + "/", { mode: "no-cors" })
+    .then(() => { crestoOk = true; recheck(); })
+    .catch(() => {
+      showStatus("Cresto is not running. Start it with `cresto start`.", false);
+      btn.disabled = true;
+    });
+
+  // Check active tab.
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    greythrOk = !!(tabs[0] && tabs[0].url && tabs[0].url.includes("greythr.com"));
+    recheck();
+  });
+})();

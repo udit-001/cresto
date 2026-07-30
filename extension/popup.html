@@ -3,27 +3,54 @@
 <head>
 <meta charset="utf-8">
 <style>
-  body { width: 320px; padding: 16px; font-family: system-ui, -apple-system, sans-serif; margin: 0; }
+  :root {
+    --bg: #ffffff;
+    --fg: #0f172a;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --primary-disabled: #93c5fd;
+    --ok-bg: #d1fae5;
+    --ok-fg: #065f46;
+    --err-bg: #fee2e2;
+    --err-fg: #991b1b;
+    --hint: #94a3b8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f172a;
+      --fg: #f1f5f9;
+      --muted: #94a3b8;
+      --border: #1e293b;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --primary-disabled: #1e40af;
+      --ok-bg: #064e3b;
+      --ok-fg: #6ee7b7;
+      --err-bg: #7f1d1d;
+      --err-fg: #fca5a5;
+      --hint: #64748b;
+    }
+  }
+  body { width: 320px; padding: 16px; font-family: system-ui, -apple-system, sans-serif; margin: 0; background: var(--bg); color: var(--fg); }
   h1 { font-size: 15px; margin: 0 0 4px 0; }
-  p { font-size: 12px; color: #666; margin: 0 0 12px 0; line-height: 1.4; }
+  p { font-size: 12px; color: var(--muted); margin: 0 0 12px 0; line-height: 1.4; }
   button { width: 100%; padding: 10px; font-size: 13px; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
-  .primary { background: #2563eb; color: white; }
-  .primary:hover { background: #1d4ed8; }
-  .primary:disabled { background: #93c5fd; cursor: not-allowed; }
+  .primary { background: var(--primary); color: white; }
+  .primary:hover { background: var(--primary-hover); }
+  .primary:disabled { background: var(--primary-disabled); cursor: not-allowed; }
   .status { margin-top: 10px; font-size: 12px; padding: 8px 10px; border-radius: 6px; display: none; }
-  .status.ok { background: #d1fae5; color: #065f46; display: block; }
-  .status.err { background: #fee2e2; color: #991b1b; display: block; }
-  .hint { margin-top: 10px; font-size: 11px; color: #999; line-height: 1.4; }
+  .status.ok { background: var(--ok-bg); color: var(--ok-fg); display: block; }
+  .status.err { background: var(--err-bg); color: var(--err-fg); display: block; }
+  .hint { margin-top: 10px; font-size: 11px; color: var(--hint); line-height: 1.4; }
 </style>
 </head>
 <body>
-  <h1>Connect to Cresto</h1>
-  <p>Sends your greytHR session to Cresto for payslip auto-fetch.</p>
+  <h1>Cresto Connector</h1>
+  <p>Fetch payslips from greytHR into Cresto.</p>
   <button id="connect" class="primary">Connect</button>
   <div id="status" class="status"></div>
-  <div class="hint">
-    Make sure you're on a greytHR ESS page and Cresto is running at localhost:7777.
-  </div>
   <script src="popup.js"></script>
 </body>
 </html>

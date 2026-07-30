@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "Cresto greytHR Connector",
-  "version": "1.0.8",
-  "description": "Send your greytHR session to Cresto for payslip auto-fetch.",
+  "name": "Cresto Connector",
+  "version": "1.1.0",
+  "description": "Connect greytHR and Kite to Cresto — fetch payslips and portfolio holdings without manual setup.",
   "permissions": ["cookies", "activeTab", "scripting"],
   "host_permissions": [
     "*://*.greythr.com/*",
-    "http://localhost:7777/*",
-    "http://127.0.0.1:7777/*"
+    "https://mcp.kite.trade/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   "browser_specific_settings": {
     "gecko": {
@@ -23,6 +24,11 @@
       "matches": ["http://localhost/*", "http://127.0.0.1/*"],
       "js": ["content.js"],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["https://mcp.kite.trade/callback*"],
+      "js": ["kite-callback.js"],
+      "run_at": "document_start"
     }
   ],
   "action": {
@@ -30,8 +36,8 @@
     "default_title": "Connect to Cresto"
   },
   "icons": {
-    "16": "icon.svg",
-    "48": "icon.svg",
-    "128": "icon.svg"
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
   }
 }

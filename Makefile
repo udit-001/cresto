@@ -1,6 +1,6 @@
 .PHONY: build css dev start stop test vet fmt clean tailwind-download \
         goose-install migrate-up migrate-down migrate-status migrate-create \
-        sign-extension
+        package-extension package-extension-firefox package-extension-chrome
 
 # Load secrets (AMO credentials) if .env exists.
 -include .env
@@ -86,14 +86,27 @@ goose-install:
 migrate-create:
 	goose -dir $(MIGRATE_DIR) create $(name) sql
 
-# --- Firefox extension signing ---
-# Signs the extension via Mozilla AMO (unlisted = self-distributed, not public).
-# Credentials are read from .env (gitignored). Get yours at:
+# --- Extension packaging ---
+# Firefox: signs via AMO (unlisted = self-distributed, not public).
+# Chrome: packages source as a ZIP (load unpacked after extracting).
+# Both artifacts are committed into internal/web/extension/ so go build
+# embeds them. Run `make package-extension` after any extension change.
+#
+# Firefox requires AMO credentials in .env (gitignored). Get yours at:
 # https://addons.mozilla.org/developers/addon/api/key/
-sign-extension:
+package-extension-firefox:
 	@test -n "$(AMO_KEY)" || (echo "AMO_KEY not set — create .env (see .gitignore)" && false)
 	@test -n "$(AMO_SECRET)" || (echo "AMO_SECRET not set — create .env (see .gitignore)" && false)
 	npx web-ext sign --channel=unlisted --source-dir=extension \
 		--api-key=$(AMO_KEY) --api-secret=$(AMO_SECRET)
-	cp web-ext-artifacts/*.xpi internal/web/extension/cresto-greyhr-connector.xpi
-	@echo "Signed XPI copied to internal/web/extension/"
+	cp web-ext-artifacts/*.xpi internal/web/extension/cresto-greythr-connector.xpi
+	@echo "Firefox XPI copied to internal/web/extension/"
+
+package-extension-chrome:
+	cd extension && zip -r ../internal/web/extension/cresto-connector-chrome.zip \
+		manifest.json popup.html popup.js content.js kite-callback.js \
+		icon16.png icon48.png icon128.png
+	@echo "Chrome ZIP copied to internal/web/extension/"
+
+package-extension: package-extension-firefox package-extension-chrome
+	@echo "Extension packaged for Firefox (XPI) and Chrome (ZIP)"
