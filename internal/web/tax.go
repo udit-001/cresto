@@ -12,6 +12,7 @@ import (
 
 	"cresto/internal/ais"
 	"cresto/internal/store"
+	"cresto/internal/tax"
 )
 
 // taxView is the view model for the /tax page. Empty state (no AIS imported)
@@ -38,6 +39,10 @@ type taxView struct {
 	TotalInterest  float64
 	TotalDividends float64
 	TotalAISTDS    float64
+
+	TaxBreakdown tax.Breakdown
+	RefundDue    float64
+	HasRefund    bool
 }
 
 // TDSRecon is one row in the TDS reconciliation table: AIS TDS per deductor
@@ -226,6 +231,16 @@ func (s *Server) populateTaxView(ctx context.Context, v *taxView, parsed *ais.Pa
 
 		v.TDSRecon = append(v.TDSRecon, recon)
 	}
+
+	v.TaxBreakdown = tax.Compute(tax.Input{
+		GrossSalary:     v.TotalSalary,
+		SavingsInterest: v.TotalSavings,
+		FDInterest:      v.TotalFD,
+		Dividends:       v.TotalDividends,
+	})
+
+	v.RefundDue = v.TotalAISTDS - v.TaxBreakdown.TotalTaxLiability
+	v.HasRefund = v.RefundDue > 0
 }
 
 func (s *Server) hasTaxProfile(ctx context.Context) bool {

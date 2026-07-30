@@ -245,6 +245,48 @@ func TestTax_Upload_TDSReconciliation_Gap(t *testing.T) {
 	}
 }
 
+func TestTax_ComputationCard_ShowsBreakdown(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+
+	doPostForm(srv, "/settings/tax-profile",
+		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+	uploadAIS(srv, []byte(taxAISFixture))
+
+	rec, _ := doGet(srv, "/tax")
+	body := rec.Body.String()
+	if !strings.Contains(body, "Tax Liability") {
+		t.Error("/tax should show Tax Liability card")
+	}
+	if !strings.Contains(body, "Standard Deduction") {
+		t.Error("/tax should show standard deduction line")
+	}
+	if !strings.Contains(body, "Tax Computation") {
+		t.Error("/tax should show Tax Computation card")
+	}
+	if !strings.Contains(body, "Total Tax Liability") {
+		t.Error("/tax should show total tax liability")
+	}
+}
+
+func TestTax_RefundDues_ShowsBalanceDue(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+
+	doPostForm(srv, "/settings/tax-profile",
+		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+	uploadAIS(srv, []byte(taxAISFixture))
+
+	rec, _ := doGet(srv, "/tax")
+	body := rec.Body.String()
+	if !strings.Contains(body, "Balance Due") && !strings.Contains(body, "Refund") {
+		t.Error("/tax should show refund or balance due section")
+	}
+	if !strings.Contains(body, "TDS Paid") {
+		t.Error("/tax should show TDS paid amount")
+	}
+}
+
 func uploadAIS(srv *Server, jsonData []byte) *httptest.ResponseRecorder {
 	body := &bytes.Buffer{}
 	w := multipart.NewWriter(body)

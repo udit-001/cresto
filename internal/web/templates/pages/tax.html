@@ -177,6 +177,124 @@
   </div>
   {{end}}
 
+  <!-- Tax Liability Breakdown -->
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">Tax Liability</h3>
+      <p class="text-muted-foreground text-sm">New regime slabs · Section 115BAC</p>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <tbody class="text-sm">
+          <tr>
+            <td class="py-2">Gross Salary ({{len .Salaries}} employer{{if gt (len .Salaries) 1}}s{{end}})</td>
+            <td class="text-right py-2 tabular-nums">{{money .TotalSalary}}</td>
+          </tr>
+          {{range .Salaries}}
+          <tr class="text-muted-foreground">
+            <td class="py-2 pl-4">— {{.Employer}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .GrossSalary}}</td>
+          </tr>
+          {{end}}
+          <tr>
+            <td class="py-2">Standard Deduction (16ia)</td>
+            <td class="text-right py-2 tabular-nums text-muted-foreground">−{{money .TaxBreakdown.StandardDeduction}}</td>
+          </tr>
+          <tr class="border-t font-medium">
+            <td class="py-2">Taxable Salary</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.TaxableSalary}}</td>
+          </tr>
+          <tr>
+            <td class="py-2">Savings Interest ({{len .SavingsInterest}} bank{{if gt (len .SavingsInterest) 1}}s{{end}})</td>
+            <td class="text-right py-2 tabular-nums">{{money .TotalSavings}}</td>
+          </tr>
+          <tr>
+            <td class="py-2">FD Interest ({{len .FDInterest}} bank{{if gt (len .FDInterest) 1}}s{{end}})</td>
+            <td class="text-right py-2 tabular-nums">{{money .TotalFD}}</td>
+          </tr>
+          <tr>
+            <td class="py-2">Dividends</td>
+            <td class="text-right py-2 tabular-nums">{{money .TotalDividends}}</td>
+          </tr>
+          <tr class="border-t font-semibold">
+            <td class="py-2">Total Taxable Income</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.TotalTaxableIncome}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- Tax Computation -->
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">Tax Computation</h3>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <tbody class="text-sm">
+          <tr>
+            <td class="py-2">Tax at normal rates (slabs)</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.NormalRateTax}}</td>
+          </tr>
+          <tr>
+            <td class="py-2">Tax at special rates (STCG @ 20% + LTCG @ 12.5%)</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.SpecialRateTax}}</td>
+          </tr>
+          {{if neg .TaxBreakdown.Rebate87A}}
+          <tr>
+            <td class="py-2">Rebate u/s 87A</td>
+            <td class="text-right py-2 tabular-nums text-muted-foreground">−{{money .TaxBreakdown.Rebate87A}}</td>
+          </tr>
+          {{end}}
+          {{if neg .TaxBreakdown.MarginalRelief}}
+          <tr>
+            <td class="py-2">Marginal Relief</td>
+            <td class="text-right py-2 tabular-nums text-muted-foreground">−{{money .TaxBreakdown.MarginalRelief}}</td>
+          </tr>
+          {{end}}
+          {{if neg .TaxBreakdown.Surcharge}}
+          <tr>
+            <td class="py-2">Surcharge ({{printf "%.0f" (mul .TaxBreakdown.SurchargeRate 100)}}%)</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.Surcharge}}</td>
+          </tr>
+          {{end}}
+          <tr>
+            <td class="py-2">Health &amp; Education Cess (4%)</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.Cess}}</td>
+          </tr>
+          <tr class="border-t font-semibold text-base">
+            <td class="py-3">Total Tax Liability</td>
+            <td class="text-right py-3 tabular-nums">{{money .TaxBreakdown.TotalTaxLiability}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- Refund / Dues -->
+  <div class="card">
+    <section class="flex items-center justify-between p-6">
+      <div>
+        <p class="text-sm text-muted-foreground">Tax Liability</p>
+        <p class="text-2xl font-semibold tabular-nums">{{money .TaxBreakdown.TotalTaxLiability}}</p>
+      </div>
+      <div class="text-center">
+        <p class="text-sm text-muted-foreground">TDS Paid</p>
+        <p class="text-2xl font-semibold tabular-nums">{{money .TotalAISTDS}}</p>
+      </div>
+      <div class="text-right">
+        {{if .HasRefund}}
+        <p class="text-sm text-muted-foreground">Refund</p>
+        <p class="text-2xl font-bold tabular-nums text-success">{{sign .RefundDue}}{{money .RefundDue}}</p>
+        {{else}}
+        <p class="text-sm text-muted-foreground">Balance Due</p>
+        <p class="text-2xl font-bold tabular-nums text-destructive">{{sign .RefundDue}}{{money .RefundDue}}</p>
+        {{end}}
+      </div>
+    </section>
+  </div>
+
   <!-- TDS Reconciliation -->
   {{if .TDSRecon}}
   <div class="card">
