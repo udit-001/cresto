@@ -477,8 +477,6 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /payslip/{id}/skip", s.handleReviewSkip)
 	mux.HandleFunc("POST /payslip/{id}/retry", s.handleRetry)
  	mux.HandleFunc("POST /payslip/{id}/delete", s.handleDeletePayslip)
-	mux.HandleFunc("POST /payslips/delete-all", s.handleDeleteAll)
-	mux.HandleFunc("POST /payslips/confirm-all", s.handleConfirmAll)
 	mux.HandleFunc("POST /payslips/bulk-delete", s.handleBulkDelete)
 	mux.HandleFunc("POST /payslips/bulk-confirm", s.handleBulkConfirm)
 	mux.HandleFunc("GET /component/{id}", s.handleComponentDetail)
@@ -511,9 +509,10 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("POST /greythr/fetch", s.handleGreytHRFetch)
 	mux.HandleFunc("GET /api/greythr/months", s.handleGreytHRMonthsAPI)
 
-	// Extension download: serves the embedded extension/ as a .xpi (zip)
-	// for one-click install in Firefox. Chrome users load it unpacked.
+	// Extension downloads: Firefox gets a signed XPI (one-click install),
+	// Chrome gets a ZIP (download, extract, load unpacked).
 	mux.HandleFunc("GET /greythr/extension.xpi", s.handleGreytHRExtension)
+	mux.HandleFunc("GET /greythr/extension.zip", s.handleExtensionZip)
 
 	// Static assets: CSS, JS. fs.Sub scopes the embed to /static.
 	staticFS, err := fs.Sub(contentFS, "static")
@@ -787,21 +786,23 @@ func (s *Server) handleComponentDetail(w http.ResponseWriter, r *http.Request) {
 
 // uploadPageData is the view model for the upload page. Shared by the
 // initial render and the error re-render so the template's fields
-// (LLM status pill) stay populated in both paths.
+// (LLM status pill, greytHR state) stay populated in both paths.
 type uploadPageData struct {
 	pageData
-	Error        string
-	LLMStatus    string
-	LLMBaseURL   string
-	LLMModelName string
+	Error           string
+	LLMStatus       string
+	LLMBaseURL      string
+	LLMModelName    string
+	GreytHRConnected bool
 }
 
 func (s *Server) handleUploadForm(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "upload", uploadPageData{
-		pageData:     pageData{Title: "Upload Payslip", PendingCount: s.pendingCount(r.Context()), ActiveBatchID: s.activeBatchID(r.Context())},
-		LLMStatus:    s.llmClient.Health(),
-		LLMBaseURL:   s.cfg.LMStudioBaseURL,
-		LLMModelName: s.cfg.ModelName,
+		pageData:         pageData{Title: "Upload Payslip", PendingCount: s.pendingCount(r.Context()), ActiveBatchID: s.activeBatchID(r.Context())},
+		LLMStatus:        s.llmClient.Health(),
+		LLMBaseURL:       s.cfg.LMStudioBaseURL,
+		LLMModelName:     s.cfg.ModelName,
+		GreytHRConnected: s.greythr.Connected(),
 	})
 }
 
@@ -971,47 +972,6 @@ func (s *Server) handleDeletePayslip(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/payslips?toast=Deleted&variant=success", http.StatusSeeOther)
 }
 
-// handleDeleteAll deletes every payslip with the given status. Used by the
-// "Delete all N [status]" button on the payslips list. The status must be
-// pending_review or failed — confirmed payslips cannot be bulk-deleted.
-func (s *Server) handleDeleteAll(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	status := r.FormValue("status")
-	if status != string(store.StatusPendingReview) && status != string(store.StatusFailed) {
-		s.renderError(w, http.StatusBadRequest, "Invalid status for bulk delete.")
-		return
-	}
-	deleted, err := s.store.DeletePayslipsByStatus(ctx, store.Status(status))
-	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, "Could not delete payslips: "+err.Error())
-		return
-	}
-	for _, p := range deleted {
-		if p.RawPDFPath != "" && s.pdfs.Exists(p.RawPDFPath) {
-			_ = os.Remove(s.pdfs.Abs(p.RawPDFPath))
-		}
-	}
-	n := len(deleted)
-	http.Redirect(w, r, fmt.Sprintf("/payslips?status=%s&toast=Deleted+%d+payslips&variant=success", status, n), http.StatusSeeOther)
-}
-
-// handleConfirmAll confirms every payslip with the given status. Only
-// pending_review is accepted — used by the "Confirm all N pending" button.
-func (s *Server) handleConfirmAll(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	status := r.FormValue("status")
-	if status != string(store.StatusPendingReview) {
-		s.renderError(w, http.StatusBadRequest, "Can only confirm pending payslips.")
-		return
-	}
-	n, err := s.store.ConfirmPayslipsByStatus(ctx, store.Status(status))
-	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, "Could not confirm payslips: "+err.Error())
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/payslips?status=%s&toast=Confirmed+%d+payslips&variant=success", status, n), http.StatusSeeOther)
-}
-
 // handleBulkDelete deletes the payslips selected via checkboxes. IDs are
 // passed as a comma-separated hidden form field. Used by the action bar.
 func (s *Server) handleBulkDelete(w http.ResponseWriter, r *http.Request) {
@@ -1178,11 +1138,12 @@ func (s *Server) handleSingleUpload(ctx context.Context, w http.ResponseWriter, 
 
 func (s *Server) renderUploadError(w http.ResponseWriter, r *http.Request, msg string) {
 	s.render(w, "upload", uploadPageData{
-		pageData:     pageData{Title: "Upload Payslip", PendingCount: s.pendingCount(r.Context()), ActiveBatchID: s.activeBatchID(r.Context())},
-		Error:        msg,
-		LLMStatus:    s.llmClient.Health(),
-		LLMBaseURL:   s.cfg.LMStudioBaseURL,
-		LLMModelName: s.cfg.ModelName,
+		pageData:         pageData{Title: "Upload Payslip", PendingCount: s.pendingCount(r.Context()), ActiveBatchID: s.activeBatchID(r.Context())},
+		Error:            msg,
+		LLMStatus:        s.llmClient.Health(),
+		LLMBaseURL:       s.cfg.LMStudioBaseURL,
+		LLMModelName:     s.cfg.ModelName,
+		GreytHRConnected: s.greythr.Connected(),
 	})
 }
 
@@ -1344,8 +1305,12 @@ func (s *Server) handleReviewSubmit(w http.ResponseWriter, r *http.Request) {
 			s.renderError(w, http.StatusInternalServerError, "Saved but could not confirm: "+err.Error())
 			return
 		}
+		// Try forward first (oldest→newest review flow); if at the end,
+		// fall back to the previous one (newest→oldest flow).
 		if next := nextPendingID(pending, p.ID); next > 0 {
 			http.Redirect(w, r, fmt.Sprintf("/payslip/%d?toast=Confirmed&variant=success", next), http.StatusSeeOther)
+		} else if prev := prevPendingID(pending, p.ID); prev > 0 {
+			http.Redirect(w, r, fmt.Sprintf("/payslip/%d?toast=Confirmed&variant=success", prev), http.StatusSeeOther)
 		} else {
 			http.Redirect(w, r, "/payslips?status=pending_review&toast=Confirmed&variant=success", http.StatusSeeOther)
 		}

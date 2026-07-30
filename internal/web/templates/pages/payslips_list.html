@@ -1,8 +1,11 @@
 {{define "page"}}
 {{$filter := .StatusFilter}}
-{{$activeCount := 0}}
-{{if eq $filter "pending_review"}}{{$activeCount = .CountPending}}{{end}}
-{{if eq $filter "failed"}}{{$activeCount = .CountFailed}}{{end}}
+
+<script>
+  if (new URLSearchParams(location.search).has('toast')) {
+    sessionStorage.removeItem('payslip-selected-ids');
+  }
+</script>
 
 {{if not .CountAll}}
   <section class="empty">
@@ -18,7 +21,8 @@
     </footer>
   </section>
 {{else}}
-  <nav class="flex flex-wrap items-center gap-2 mb-6">
+  <!-- Tier 1: Scope — status tabs + clear filters -->
+  <div class="flex flex-wrap items-center gap-2 mb-3">
     <a href="/payslips{{if .EmployerFilter}}?employer={{urlquery .EmployerFilter}}{{end}}" class="rounded-full px-2.5 py-0.5 text-xs transition-colors {{if eq $filter ""}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}">
       All <span class="ml-1 opacity-70">({{.CountAll}})</span>
     </a>
@@ -28,104 +32,84 @@
     <a href="/payslips?status=failed{{if .EmployerFilter}}&amp;employer={{urlquery .EmployerFilter}}{{end}}" class="rounded-full px-2.5 py-0.5 text-xs transition-colors {{if eq $filter "failed"}}bg-muted text-foreground{{else}}text-muted-foreground hover:bg-muted hover:text-foreground{{end}}">
       Failed <span class="ml-1 opacity-70">({{.CountFailed}})</span>
     </a>
-    {{if and (eq $filter "pending_review") (gt .CountPending 0)}}
-      <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('confirm-all-dialog').showModal()">
-        Confirm all {{.CountPending}}
-      </button>
-    {{end}}
-    {{if and (or (eq $filter "pending_review") (eq $filter "failed")) (gt $activeCount 0)}}
-      <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('delete-all-dialog').showModal()">
-        Delete all {{$activeCount}}
-      </button>
-    {{end}}
-
-    {{if .Employers}}
-    <form method="GET" action="/payslips" class="ml-auto flex items-center gap-2">
-      {{if $filter}}<input type="hidden" name="status" value="{{$filter}}">{{end}}
-      <div class="combobox" id="company-select" data-placeholder="All companies">
-        <input type="text" role="combobox" placeholder="All companies" autocomplete="off" autocorrect="off" spellcheck="false" aria-autocomplete="list" aria-expanded="false" aria-controls="company-select-listbox" class="rounded-full px-2.5 py-0.5 text-xs border border-border bg-transparent text-muted-foreground hover:text-foreground transition-colors" value="{{if .EmployerFilter}}{{.EmployerFilter}}{{end}}">
-        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground opacity-50 shrink-0"><path d="m6 9 6 6 6-6" /></svg>
-        <div id="company-select-popover" data-popover aria-hidden="true" data-side="bottom" data-align="end">
-          <div role="listbox" id="company-select-listbox" aria-orientation="vertical" data-empty="No companies found.">
-            <div role="option" data-value="">All companies</div>
-            {{range .Employers}}
-            <div role="option" data-value="{{.}}">{{.}}</div>
-            {{end}}
-          </div>
-        </div>
-        <input type="hidden" name="employer" value="{{.EmployerFilter}}">
-      </div>
-
-      {{if .Years}}
-      <div class="flex items-center gap-1.5">
-        <button type="button" class="btn period-preset" data-variant="{{if eq .PeriodPreset "this-fy"}}secondary{{else}}outline{{end}}" data-size="sm" data-preset="this-fy">This FY</button>
-        <button type="button" class="btn period-preset" data-variant="{{if eq .PeriodPreset "last-fy"}}secondary{{else}}outline{{end}}" data-size="sm" data-preset="last-fy">Last FY</button>
-        <button type="button" class="btn period-preset" data-variant="{{if eq .PeriodPreset "all"}}secondary{{else}}outline{{end}}" data-size="sm" data-preset="all">All time</button>
-        <span class="text-muted-foreground/20 mx-0.5" aria-hidden="true">|</span>
-        <input type="text" name="month_from" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-8 text-center tabular-nums" placeholder="MM" value="{{if .MonthFrom}}{{.MonthFrom}}{{end}}" maxlength="2" inputmode="numeric" pattern="[0-9]*">
-        <input type="text" name="year_from" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-12 text-center tabular-nums" placeholder="YYYY" value="{{if .YearFrom}}{{.YearFrom}}{{end}}" maxlength="4" inputmode="numeric" pattern="[0-9]*">
-        <span class="text-muted-foreground/30 text-xs" aria-hidden="true">–</span>
-        <input type="text" name="month_to" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-8 text-center tabular-nums" placeholder="MM" value="{{if .MonthTo}}{{.MonthTo}}{{end}}" maxlength="2" inputmode="numeric" pattern="[0-9]*">
-        <input type="text" name="year_to" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-12 text-center tabular-nums" placeholder="YYYY" value="{{if .YearTo}}{{.YearTo}}{{end}}" maxlength="4" inputmode="numeric" pattern="[0-9]*">
-      </div>
-      {{end}}
-    </form>
-    <script>
-      (() => {
-        // Filter auto-submit: combobox change, text inputs on blur, preset buttons on click
-        document.addEventListener('change', function(e) {
-          // Combobox fires change on its root with detail.value; also handle
-          // the period inputs directly.
-          var combo = e.target.closest && e.target.closest('.combobox');
-          if (combo) { combo.closest('form').submit(); return; }
-          var el = e.target.closest && e.target.closest('.period-input');
-          if (el) { el.closest('form').submit(); }
-        });
-        // Enter key in text inputs submits
-        document.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter') {
-            var el = e.target.closest && e.target.closest('.period-input');
-            if (el) {
-              e.preventDefault();
-              el.closest('form').submit();
-            }
-          }
-        });
-        // Preset buttons
-        document.addEventListener('click', function(e) {
-          var preset = e.target.closest && e.target.closest('.period-preset');
-          if (!preset) return;
-          var form = preset.closest('form');
-          var f = form.querySelector('[name="month_from"]');
-          var yf = form.querySelector('[name="year_from"]');
-          var mt = form.querySelector('[name="month_to"]');
-          var yt = form.querySelector('[name="year_to"]');
-          var now = new Date();
-          var y = now.getFullYear();
-          var m = now.getMonth() + 1;
-          var fyStart = m >= 4 ? y : y - 1;
-          if (preset.dataset.preset === 'this-fy') {
-            f.value = '4'; yf.value = fyStart;
-            mt.value = '3'; yt.value = fyStart + 1;
-          } else if (preset.dataset.preset === 'last-fy') {
-            f.value = '4'; yf.value = fyStart - 1;
-            mt.value = '3'; yt.value = fyStart;
-          } else if (preset.dataset.preset === 'all') {
-            f.value = ''; yf.value = '';
-            mt.value = ''; yt.value = '';
-          }
-          form.submit();
-        });
-      })();
-    </script>
-    {{end}}
-  </nav>
-
-  <div class="flex items-center gap-2 mb-4">
     {{if or .StatusFilter .EmployerFilter .YearFrom .YearTo .MonthFrom .MonthTo}}
-      <a href="/payslips" class="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">Clear filters</a>
+      <a href="/payslips" class="ml-auto text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">Clear filters</a>
     {{end}}
   </div>
+
+  <!-- Tier 2: Refine — company + period filters -->
+  {{if .Employers}}
+  <form method="GET" action="/payslips" class="flex flex-wrap items-center gap-2 mb-6">
+    {{if $filter}}<input type="hidden" name="status" value="{{$filter}}">{{end}}
+    <div class="combobox" id="company-select" data-placeholder="All companies">
+      <input type="text" role="combobox" placeholder="All companies" autocomplete="off" autocorrect="off" spellcheck="false" aria-autocomplete="list" aria-expanded="false" aria-controls="company-select-listbox" class="rounded-full px-2.5 py-0.5 text-xs border border-border bg-transparent text-muted-foreground hover:text-foreground transition-colors" value="{{if .EmployerFilter}}{{.EmployerFilter}}{{end}}">
+      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground opacity-50 shrink-0"><path d="m6 9 6 6 6-6" /></svg>
+      <div id="company-select-popover" data-popover aria-hidden="true" data-side="bottom" data-align="end">
+        <div role="listbox" id="company-select-listbox" aria-orientation="vertical" data-empty="No companies found.">
+          <div role="option" data-value="">All companies</div>
+          {{range .Employers}}
+          <div role="option" data-value="{{.}}">{{.}}</div>
+          {{end}}
+        </div>
+      </div>
+      <input type="hidden" name="employer" value="{{.EmployerFilter}}">
+    </div>
+
+    {{if .Years}}
+    <div class="flex items-center gap-1.5">
+      <button type="button" class="btn period-preset" data-variant="{{if eq .PeriodPreset "this-fy"}}secondary{{else}}outline{{end}}" data-size="sm" data-preset="this-fy">This FY</button>
+      <button type="button" class="btn period-preset" data-variant="{{if eq .PeriodPreset "last-fy"}}secondary{{else}}outline{{end}}" data-size="sm" data-preset="last-fy">Last FY</button>
+      <button type="button" class="btn period-preset" data-variant="{{if eq .PeriodPreset "all"}}secondary{{else}}outline{{end}}" data-size="sm" data-preset="all">All time</button>
+      <span class="text-muted-foreground/20 mx-0.5" aria-hidden="true">|</span>
+      <input type="text" name="month_from" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-8 text-center tabular-nums" placeholder="MM" value="{{if .MonthFrom}}{{.MonthFrom}}{{end}}" maxlength="2" inputmode="numeric" pattern="[0-9]*">
+      <input type="text" name="year_from" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-12 text-center tabular-nums" placeholder="YYYY" value="{{if .YearFrom}}{{.YearFrom}}{{end}}" maxlength="4" inputmode="numeric" pattern="[0-9]*">
+      <span class="text-muted-foreground/30 text-xs" aria-hidden="true">–</span>
+      <input type="text" name="month_to" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-8 text-center tabular-nums" placeholder="MM" value="{{if .MonthTo}}{{.MonthTo}}{{end}}" maxlength="2" inputmode="numeric" pattern="[0-9]*">
+      <input type="text" name="year_to" class="period-input rounded-full px-2 py-0.5 text-xs border border-border bg-transparent text-muted-foreground w-12 text-center tabular-nums" placeholder="YYYY" value="{{if .YearTo}}{{.YearTo}}{{end}}" maxlength="4" inputmode="numeric" pattern="[0-9]*">
+    </div>
+    {{end}}
+  </form>
+  <script>
+    (() => {
+      document.addEventListener('change', function(e) {
+        var combo = e.target.closest && e.target.closest('.combobox');
+        if (combo) { combo.closest('form').submit(); return; }
+        var el = e.target.closest && e.target.closest('.period-input');
+        if (el) { el.closest('form').submit(); }
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          var el = e.target.closest && e.target.closest('.period-input');
+          if (el) { e.preventDefault(); el.closest('form').submit(); }
+        }
+      });
+      document.addEventListener('click', function(e) {
+        var preset = e.target.closest && e.target.closest('.period-preset');
+        if (!preset) return;
+        var form = preset.closest('form');
+        var f = form.querySelector('[name="month_from"]');
+        var yf = form.querySelector('[name="year_from"]');
+        var mt = form.querySelector('[name="month_to"]');
+        var yt = form.querySelector('[name="year_to"]');
+        var now = new Date();
+        var y = now.getFullYear();
+        var m = now.getMonth() + 1;
+        var fyStart = m >= 4 ? y : y - 1;
+        if (preset.dataset.preset === 'this-fy') {
+          f.value = '4'; yf.value = fyStart;
+          mt.value = '3'; yt.value = fyStart + 1;
+        } else if (preset.dataset.preset === 'last-fy') {
+          f.value = '4'; yf.value = fyStart - 1;
+          mt.value = '3'; yt.value = fyStart;
+        } else if (preset.dataset.preset === 'all') {
+          f.value = ''; yf.value = '';
+          mt.value = ''; yt.value = '';
+        }
+        form.submit();
+      });
+    })();
+  </script>
+  {{end}}
 
   {{if not .Payslips}}
     <section class="empty">
@@ -214,42 +198,6 @@
     if (q && !q.includes('toast=')) sessionStorage.setItem('payslip-filter', q);
   })();
 </script>
-
-{{if and (or (eq $filter "pending_review") (eq $filter "failed")) (gt $activeCount 0)}}
-<dialog class="alert-dialog" id="delete-all-dialog">
-  <div>
-    <header>
-      <h2>Delete all {{$activeCount}} payslips?</h2>
-      <p>This permanently removes {{$activeCount}} payslips and their PDFs. This cannot be undone.</p>
-    </header>
-    <footer>
-      <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
-      <form method="POST" action="/payslips/delete-all">
-        <input type="hidden" name="status" value="{{$filter}}">
-        <button type="submit" class="btn" data-variant="destructive">Delete {{$activeCount}} payslips</button>
-      </form>
-    </footer>
-  </div>
-</dialog>
-{{end}}
-
-{{if and (eq $filter "pending_review") (gt .CountPending 0)}}
-<dialog class="alert-dialog" id="confirm-all-dialog">
-  <div>
-    <header>
-      <h2>Confirm all {{.CountPending}} pending payslips?</h2>
-      <p>This marks {{.CountPending}} payslips as confirmed without individual review. This cannot be undone.</p>
-    </header>
-    <footer>
-      <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
-      <form method="POST" action="/payslips/confirm-all">
-        <input type="hidden" name="status" value="pending_review">
-        <button type="submit" class="btn">Confirm {{.CountPending}} payslips</button>
-      </form>
-    </footer>
-  </div>
-</dialog>
-{{end}}
 
 <dialog class="alert-dialog" id="bulk-delete-dialog">
   <div>
@@ -366,13 +314,6 @@
       document.getElementById('bulk-confirm-count').textContent = ids.length;
       document.getElementById('bulk-confirm-dialog').showModal();
     };
-
-    // Clear selection after a bulk operation — the redirect includes a toast
-    // param, so its presence means an action just completed.
-    if (new URLSearchParams(location.search).has('toast')) {
-      sessionStorage.removeItem(STORAGE_KEY);
-      selectedIds = new Set();
-    }
 
     // Restore checkbox state from sessionStorage on page load.
     document.querySelectorAll('.payslip-checkbox').forEach(cb => {
