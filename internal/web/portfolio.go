@@ -17,7 +17,7 @@ import (
 type brokerStatus struct {
 	Name      string // display name: "Groww" or "Kite"
 	Connected bool   // has a live session/token right now
-	Expired   bool   // token lapsed (Groww-only; Kite has no expired state)
+	Expired   bool   // token lapsed mid-fetch (session file exists but server rejected it)
 }
 
 // portfolioView is the shared state for the /portfolio page. Computed once
@@ -54,6 +54,7 @@ func (s *Server) preparePortfolioView(ctx context.Context) portfolioView {
 		Kite: brokerStatus{
 			Name:      "Kite",
 			Connected: s.kite.Connected(),
+			Expired:   s.kite.HasExpiredSession(),
 		},
 	}
 
@@ -87,6 +88,7 @@ func (s *Server) preparePortfolioView(ctx context.Context) portfolioView {
 		if err != nil {
 			if errors.Is(err, kite.ErrNotConnected) {
 				v.Kite.Connected = false
+				v.Kite.Expired = true
 			} else {
 				v.KiteError = userFacingBrokerError("Kite", err)
 			}
@@ -168,6 +170,7 @@ type portfolioHoldingsResponse struct {
 	GrowwConnected bool                   `json:"groww_connected"`
 	KiteConnected  bool                   `json:"kite_connected"`
 	GrowwExpired   bool                   `json:"groww_expired"`
+	KiteExpired    bool                   `json:"kite_expired"`
 	Holdings       []portfolioHoldingJSON `json:"holdings"`
 	TotalValue     float64                `json:"total_value"`
 	TotalInvested  float64                `json:"total_invested"`
@@ -225,6 +228,7 @@ func (s *Server) handlePortfolioHoldingsAPI(w http.ResponseWriter, r *http.Reque
 		GrowwConnected: v.Groww.Connected,
 		KiteConnected:  v.Kite.Connected,
 		GrowwExpired:   v.Groww.Expired,
+		KiteExpired:    v.Kite.Expired,
 		Holdings:       holdings,
 		TotalValue:     v.Totals.TotalValue,
 		TotalInvested:  v.Totals.TotalInvested,

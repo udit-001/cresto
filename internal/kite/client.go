@@ -58,12 +58,44 @@ var ErrNotConnected = errors.New("kite: not connected (session missing or invali
 type sessionFile struct {
 	SessionID string    `json:"session_id"`
 	CreatedAt time.Time `json:"created_at"`
+	Expired   bool      `json:"expired,omitempty"`
 }
 
-// Connected reports whether a session file exists on disk.
+// Connected reports whether a session file exists on disk and is not marked
+// expired. Note: the session may still be server-side invalid even if this
+// returns true — the expiry flag is set when a live fetch fails.
 func (c *Client) Connected() bool {
-	_, err := c.loadSession()
-	return err == nil
+	sess, err := c.loadSession()
+	if err != nil {
+		return false
+	}
+	return !sess.Expired
+}
+
+// HasExpiredSession reports whether a session file exists but was marked
+// expired by a failed fetch. Mirrors Groww's HasExpiredToken so the settings
+// and portfolio pages can show "session expired — reconnect" instead of
+// "not connected" or a confusing Disconnect button.
+func (c *Client) HasExpiredSession() bool {
+	sess, err := c.loadSession()
+	if err != nil {
+		return false
+	}
+	return sess.Expired
+}
+
+// MarkExpired flags the saved session as expired without deleting it, so the
+// UI can distinguish "never connected" from "session expired."
+func (c *Client) MarkExpired() {
+	sess, err := c.loadSession()
+	if err != nil {
+		return
+	}
+	if sess.Expired {
+		return
+	}
+	sess.Expired = true
+	_ = c.saveSession(sess)
 }
 
 // StartAuth begins the Kite session auth flow. It initializes an MCP
@@ -183,17 +215,18 @@ func (c *Client) callRaw(ctx context.Context, toolName string, args map[string]i
 	raw, err := client.CallTool(ctx, headers, toolName, args)
 	if err != nil {
 		if errors.Is(err, mcp.ErrUnauthorized) {
+			c.MarkExpired()
 			return "", ErrNotConnected
 		}
-		// Kite returns tool errors (not HTTP errors) for "please log in" —
-		// the tool returns isError: true with "Please log in first".
-		if isLoginRequired(err.Error()) {
+		if isSessionExpired(err.Error()) {
+			c.MarkExpired()
 			return "", ErrNotConnected
 		}
 		return "", fmt.Errorf("kite tools/call %q: %w", toolName, err)
 	}
 
-	if isLoginRequired(raw) {
+	if isSessionExpired(raw) {
+		c.MarkExpired()
 		return "", ErrNotConnected
 	}
 
@@ -239,10 +272,16 @@ func extractAuthorizeURL(text string) string {
 	return m
 }
 
-// isLoginRequired checks whether the raw text indicates the session is not
-// authenticated. Kite returns this as a tool error, not an HTTP error.
-func isLoginRequired(raw string) bool {
-	return raw != "" && strings.Contains(raw, "Please log in first")
+// isSessionExpired checks whether the raw text indicates the session is not
+// authenticated or has expired. Kite returns these as tool errors, not HTTP
+// errors.
+func isSessionExpired(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	lower := strings.ToLower(raw)
+	return strings.Contains(lower, "please log in first") ||
+		strings.Contains(lower, "invalid session id")
 }
 
 // SaveSessionForTest writes a session file so Connected returns true.

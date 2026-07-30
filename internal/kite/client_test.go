@@ -71,15 +71,21 @@ func TestExtractAuthorizeURL_NotFound(t *testing.T) {
 	}
 }
 
-func TestIsLoginRequired(t *testing.T) {
-	if !isLoginRequired("Please log in first using the login tool") {
-		t.Errorf("isLoginRequired should return true for 'Please log in first'")
+func TestIsSessionExpired(t *testing.T) {
+	cases := []struct {
+		input string
+		want  bool
+	}{
+		{"Please log in first using the login tool", true},
+		{"Invalid session ID", true},
+		{"invalid session id", true},
+		{"here are your holdings", false},
+		{"", false},
 	}
-	if isLoginRequired("here are your holdings") {
-		t.Errorf("isLoginRequired should return false for normal text")
-	}
-	if isLoginRequired("") {
-		t.Errorf("isLoginRequired should return false for empty string")
+	for _, tc := range cases {
+		if got := isSessionExpired(tc.input); got != tc.want {
+			t.Errorf("isSessionExpired(%q) = %v, want %v", tc.input, got, tc.want)
+		}
 	}
 }
 

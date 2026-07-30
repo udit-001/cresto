@@ -37,6 +37,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		Kite: brokerStatus{
 			Name:      "Kite",
 			Connected: s.kite.Connected(),
+			Expired:   s.kite.HasExpiredSession(),
 		},
 		GreytHR: greythrStatus{
 			Connected: s.greythr.Connected(),

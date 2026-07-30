@@ -22,6 +22,11 @@
     <section>Groww session expired. <a href="/groww/connect" class="underline underline-offset-2">Reconnect</a></section>
   </div>
   {{end}}
+  {{if and (not .Kite.Connected) .Kite.Expired}}
+  <div class="alert" data-variant="warning">
+    <section>Kite session expired. <a href="/kite/connect" class="underline underline-offset-2">Reconnect</a></section>
+  </div>
+  {{end}}
 
   <!-- Holdings section -->
   <div class="flex items-center justify-between gap-4">
