@@ -61,7 +61,7 @@ func TestMapToPayslip_FullPayslip(t *testing.T) {
 	month := PayslipMonth{FromDate: "2026-06-01", Month: "Jun 2026"}
 	cans := testCanonicals()
 
-	p, err := MapToPayslip(data, month, "gyansys.greythr.com", cans)
+	p, err := MapToPayslip(data, month, "gyansys.greythr.com", cans, nil)
 	if err != nil {
 		t.Fatalf("MapToPayslip: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestMapToPayslip_KeywordAndFallbackResolution(t *testing.T) {
 	}}
 	cans := testCanonicals()
 
-	p, err := MapToPayslip(data, PayslipMonth{FromDate: "2026-01-15"}, "acme.greythr.com", cans)
+	p, err := MapToPayslip(data, PayslipMonth{FromDate: "2026-01-15"}, "acme.greythr.com", cans, nil)
 	if err != nil {
 		t.Fatalf("MapToPayslip: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestMapToPayslip_SkipsZeroAndHidden(t *testing.T) {
 	}}
 	cans := testCanonicals()
 
-	p, err := MapToPayslip(data, PayslipMonth{FromDate: "2026-03-01"}, "x.greythr.com", cans)
+	p, err := MapToPayslip(data, PayslipMonth{FromDate: "2026-03-01"}, "x.greythr.com", cans, nil)
 	if err != nil {
 		t.Fatalf("MapToPayslip: %v", err)
 	}
@@ -175,8 +175,57 @@ func TestMapToPayslip_MissingFallbackCanonicalErrors(t *testing.T) {
 	data := &PayslipData{Content: []PayslipItem{
 		mkItem("WEIRD_EARNING", "INCOME", "Mystery", 3000, true),
 	}}
-	_, err := MapToPayslip(data, PayslipMonth{FromDate: "2026-01-01"}, "x.greythr.com", cans)
+	_, err := MapToPayslip(data, PayslipMonth{FromDate: "2026-01-01"}, "x.greythr.com", cans, nil)
 	if err == nil {
 		t.Fatal("want error for missing fallback canonical, got nil")
+	}
+}
+
+func TestMapToPayslip_SetsYTD(t *testing.T) {
+	data := &PayslipData{Content: []PayslipItem{
+		mkItem("BASIC", "INCOME", "Basic", 112500, true),
+		mkItem("PF", "DEDUCT", "PF", -13500, true),
+	}}
+	ytd := map[string]float64{
+		"BASIC": 337500,
+		"PF":    -40500,
+	}
+	cans := testCanonicals()
+
+	p, err := MapToPayslip(data, PayslipMonth{FromDate: "2026-06-01"}, "x.greythr.com", cans, ytd)
+	if err != nil {
+		t.Fatalf("MapToPayslip: %v", err)
+	}
+
+	names := canonNameByID(cans)
+	for _, c := range p.Components {
+		switch names[c.CanonicalID] {
+		case "basic":
+			if c.YTDAmt != 337500 {
+				t.Errorf("basic YTD = %v, want 337500", c.YTDAmt)
+			}
+		case "epf":
+			if c.YTDAmt != -40500 {
+				t.Errorf("epf YTD = %v, want -40500", c.YTDAmt)
+			}
+		}
+	}
+}
+
+func TestFYYearFor(t *testing.T) {
+	cases := []struct {
+		month, year, want int
+	}{
+		{4, 2026, 2026},  // April → same year
+		{6, 2026, 2026},  // June → same year
+		{12, 2026, 2026}, // Dec → same year
+		{1, 2027, 2026},  // Jan → prior year
+		{3, 2027, 2026},  // March → prior year
+	}
+	for _, tc := range cases {
+		got := FYYearFor(tc.month, tc.year)
+		if got != tc.want {
+			t.Errorf("FYYearFor(%d, %d) = %d, want %d", tc.month, tc.year, got, tc.want)
+		}
 	}
 }

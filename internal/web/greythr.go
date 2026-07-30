@@ -221,10 +221,25 @@ func (s *Server) processGreytHRFetch(batchID string, months []greythr.PayslipMon
 		log.Printf("greythr batch %s: fetch employee info (continuing without): %v", batchID, empErr)
 	}
 
+	// YTD cache: FY year → summary. Lazy-fetched per FY (one API call covers
+	// all months in the financial year).
+	ytdCache := make(map[int]*greythr.YTDSummary)
+
 	for _, m := range months {
 		_ = s.store.UpdateBatchProgress(ctx, batchID, m.Month, "fetching")
 
-		p, err := s.fetchAndMapOne(ctx, m, sess.Host, info, canonicals)
+		payMonth, payYear := greythr.ParseFromDate(m.FromDate)
+		fyYear := greythr.FYYearFor(payMonth, payYear)
+		if _, ok := ytdCache[fyYear]; !ok {
+			ytd, err := s.greythr.FetchYTDSummary(ctx, fyYear)
+			if err != nil {
+				log.Printf("greythr batch %s: fetch YTD for FY %d (continuing without): %v", batchID, fyYear, err)
+			} else {
+				ytdCache[fyYear] = ytd
+			}
+		}
+
+		p, err := s.fetchAndMapOne(ctx, m, sess.Host, info, ytdCache, canonicals)
 		if err != nil {
 			log.Printf("greythr batch %s: %s: %v", batchID, m.Month, err)
 			failed := store.Payslip{
@@ -261,13 +276,20 @@ func (s *Server) processGreytHRFetch(batchID string, months []greythr.PayslipMon
 // store.Payslip ready for SavePayslip. The PDF is saved via pdfstore for
 // archival; the payslip data comes from the JSON endpoint (no LLM needed).
 // Employee metadata (info) is stamped onto the payslip after mapping.
-func (s *Server) fetchAndMapOne(ctx context.Context, m greythr.PayslipMonth, host string, info greythr.EmployeeInfo, canonicals []store.Canonical) (store.Payslip, error) {
+func (s *Server) fetchAndMapOne(ctx context.Context, m greythr.PayslipMonth, host string, info greythr.EmployeeInfo, ytdCache map[int]*greythr.YTDSummary, canonicals []store.Canonical) (store.Payslip, error) {
 	data, err := s.greythr.FetchPayslipData(ctx, m.ID)
 	if err != nil {
 		return store.Payslip{}, fmt.Errorf("fetch data: %w", err)
 	}
 
-	p, err := greythr.MapToPayslip(data, m, host, canonicals)
+	payMonth, payYear := greythr.ParseFromDate(m.FromDate)
+	fyYear := greythr.FYYearFor(payMonth, payYear)
+	var ytd map[string]float64
+	if summary := ytdCache[fyYear]; summary != nil {
+		ytd = summary.YTDForMonth(payMonth)
+	}
+
+	p, err := greythr.MapToPayslip(data, m, host, canonicals, ytd)
 	if err != nil {
 		return store.Payslip{}, fmt.Errorf("map: %w", err)
 	}
@@ -320,8 +342,7 @@ func (s *Server) handleGreytHRMonthsAPI(w http.ResponseWriter, r *http.Request) 
 // handleGreytHRExtension serves the Mozilla-signed XPI for one-click install
 // in Firefox. The XPI is pre-signed via AMO (web-ext sign --channel=unlisted)
 // and embedded in the binary. Firefox triggers the install prompt when served
-// with Content-Type: application/x-xpinstall. Chrome users load the extension
-// unpacked from the extension/ source directory.
+// with Content-Type: application/x-xpinstall.
 func (s *Server) handleGreytHRExtension(w http.ResponseWriter, r *http.Request) {
 	data, err := contentFS.ReadFile("extension/cresto-greythr-connector.xpi")
 	if err != nil {
@@ -330,5 +351,18 @@ func (s *Server) handleGreytHRExtension(w http.ResponseWriter, r *http.Request) 
 	}
 	w.Header().Set("Content-Type", "application/x-xpinstall")
 	w.Header().Set("Content-Disposition", `attachment; filename="cresto-greythr-connector.xpi"`)
+	w.Write(data)
+}
+
+// handleExtensionZip serves the extension as a ZIP for Chrome users. They
+// download, extract, and load it unpacked via chrome://extensions.
+func (s *Server) handleExtensionZip(w http.ResponseWriter, r *http.Request) {
+	data, err := contentFS.ReadFile("extension/cresto-connector-chrome.zip")
+	if err != nil {
+		http.Error(w, "extension zip not found", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="cresto-connector-chrome.zip"`)
 	w.Write(data)
 }

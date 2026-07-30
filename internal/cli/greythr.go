@@ -73,6 +73,10 @@ func runGreytHRFetch(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  ⚠ Could not fetch employee info (continuing without): %v\n", empErr)
 	}
 
+	// YTD cache: FY year → summary. Lazy-fetched per FY (one API call covers
+	// all months in the financial year).
+	ytdCache := make(map[int]*greythr.YTDSummary)
+
 	fetched, skipped, failed := 0, 0, 0
 	for _, m := range months.Months {
 		if !m.Released {
@@ -97,7 +101,17 @@ func runGreytHRFetch(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		p, err := fetchAndMapGreytHR(ctx, client, pdfs, m, sess.Host, info, canonicals)
+		fyYear := greythr.FYYearFor(pm, py)
+		if _, ok := ytdCache[fyYear]; !ok {
+			ytd, err := client.FetchYTDSummary(ctx, fyYear)
+			if err != nil {
+				log.Printf("fetch YTD for FY %d (continuing without): %v", fyYear, err)
+			} else {
+				ytdCache[fyYear] = ytd
+			}
+		}
+
+		p, err := fetchAndMapGreytHR(ctx, client, pdfs, m, sess.Host, info, ytdCache, canonicals)
 		if err != nil {
 			fmt.Printf("  ✗ %s: %v\n", m.Month, err)
 			failed++
@@ -124,13 +138,20 @@ func runGreytHRFetch(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func fetchAndMapGreytHR(ctx context.Context, client *greythr.Client, pdfs *pdfstore.Store, m greythr.PayslipMonth, host string, info greythr.EmployeeInfo, canonicals []store.Canonical) (store.Payslip, error) {
+func fetchAndMapGreytHR(ctx context.Context, client *greythr.Client, pdfs *pdfstore.Store, m greythr.PayslipMonth, host string, info greythr.EmployeeInfo, ytdCache map[int]*greythr.YTDSummary, canonicals []store.Canonical) (store.Payslip, error) {
 	data, err := client.FetchPayslipData(ctx, m.ID)
 	if err != nil {
 		return store.Payslip{}, fmt.Errorf("fetch data: %w", err)
 	}
 
-	p, err := greythr.MapToPayslip(data, m, host, canonicals)
+	payMonth, payYear := greythr.ParseFromDate(m.FromDate)
+	fyYear := greythr.FYYearFor(payMonth, payYear)
+	var ytd map[string]float64
+	if summary := ytdCache[fyYear]; summary != nil {
+		ytd = summary.YTDForMonth(payMonth)
+	}
+
+	p, err := greythr.MapToPayslip(data, m, host, canonicals, ytd)
 	if err != nil {
 		return store.Payslip{}, fmt.Errorf("map: %w", err)
 	}

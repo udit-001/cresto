@@ -100,7 +100,11 @@ func mapLabelToCanonical(label string) string {
 // Employee metadata (designation, employee number) is fetched separately via
 // FetchEmployeeInfo and stamped onto the payslip by the caller — the mapper
 // only derives fields it can compute from the payslip data itself.
-func MapToPayslip(data *PayslipData, month PayslipMonth, host string, canonicals []store.Canonical) (store.Payslip, error) {
+//
+// The ytd map (greytHR item name → cumulative YTD amount) is used to set
+// YTDAmt on each component. Pass nil if YTD data is unavailable — components
+// get YTDAmt=0.
+func MapToPayslip(data *PayslipData, month PayslipMonth, host string, canonicals []store.Canonical, ytd map[string]float64) (store.Payslip, error) {
 	byName := make(map[string]store.Canonical, len(canonicals))
 	for _, c := range canonicals {
 		byName[c.Name] = c
@@ -161,6 +165,7 @@ func MapToPayslip(data *PayslipData, month PayslipMonth, host string, canonicals
 			CanonicalID: canon.ID,
 			RawLabel:    def.Description,
 			Amount:      item.Value,
+			YTDAmt:      ytd[def.Name],
 			Category:    category,
 		})
 	}
@@ -188,6 +193,16 @@ func resolveCanonicalSlug(name, description string, category store.Category, byN
 
 func ParseFromDate(fromDate string) (month, year int) {
 	return parseFromDate(fromDate)
+}
+
+// FYYearFor returns the Indian financial year start year for the given
+// calendar month/year. April–March FY: months >= April belong to the FY
+// starting that year; January–March belong to the FY starting the prior year.
+func FYYearFor(month, year int) int {
+	if month >= 4 {
+		return year
+	}
+	return year - 1
 }
 
 func parseFromDate(fromDate string) (month, year int) {

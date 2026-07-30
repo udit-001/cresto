@@ -67,3 +67,50 @@ func TestParseEmployeeNo_Garbage(t *testing.T) {
 		t.Fatal("want error for invalid JSON, got nil")
 	}
 }
+
+const ytdSummaryFixture = `{
+  "data": [
+    {"name": "BASIC", "total": 337500, "m4": 112500, "m5": 112500, "m6": 112500},
+    {"name": "PF", "total": -40500, "m4": -13500, "m5": -13500, "m6": -13500}
+  ],
+  "payrolls": [{"code": "m4", "description": "Apr 2026"}, {"code": "m5", "description": "May 2026"}, {"code": "m6", "description": "Jun 2026"}]
+}`
+
+func TestParseYTDSummary(t *testing.T) {
+	items, err := parseYTDSummary([]byte(ytdSummaryFixture))
+	if err != nil {
+		t.Fatalf("parseYTDSummary: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("items = %d, want 2", len(items))
+	}
+	if items[0]["name"] != "BASIC" {
+		t.Errorf("first item name = %v, want BASIC", items[0]["name"])
+	}
+}
+
+func TestYTDSummary_YTDForMonth(t *testing.T) {
+	items, _ := parseYTDSummary([]byte(ytdSummaryFixture))
+	summary := &YTDSummary{items: items}
+
+	// April (first month of FY): YTD = just April
+	ytdApril := summary.YTDForMonth(4)
+	if ytdApril["BASIC"] != 112500 {
+		t.Errorf("April BASIC YTD = %v, want 112500", ytdApril["BASIC"])
+	}
+
+	// June (m6): YTD = Apr + May + Jun
+	ytdJune := summary.YTDForMonth(6)
+	if ytdJune["BASIC"] != 337500 {
+		t.Errorf("June BASIC YTD = %v, want 337500", ytdJune["BASIC"])
+	}
+	if ytdJune["PF"] != -40500 {
+		t.Errorf("June PF YTD = %v, want -40500", ytdJune["PF"])
+	}
+
+	// May (m5): YTD = Apr + May
+	ytdMay := summary.YTDForMonth(5)
+	if ytdMay["BASIC"] != 225000 {
+		t.Errorf("May BASIC YTD = %v, want 225000", ytdMay["BASIC"])
+	}
+}

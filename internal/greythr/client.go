@@ -264,6 +264,71 @@ func parseEmployeeNo(body []byte) (string, error) {
 	return "", nil
 }
 
+// YTDSummary is the parsed response from the greytHR YTD statement endpoint.
+// It holds raw per-item monthly data and computes cumulative YTD for any
+// calendar month within the financial year.
+type YTDSummary struct {
+	items []map[string]any
+}
+
+// YTDForMonth returns a map of greytHR item name → cumulative YTD amount,
+// summing monthly values from April up to and including the given calendar
+// month (in Indian financial-year order: Apr→Mar).
+func (s *YTDSummary) YTDForMonth(month int) map[string]float64 {
+	fyOrder := []int{4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3}
+	result := make(map[string]float64)
+	for _, item := range s.items {
+		name, _ := item["name"].(string)
+		if name == "" {
+			continue
+		}
+		var sum float64
+		for _, m := range fyOrder {
+			key := fmt.Sprintf("m%d", m)
+			if v, ok := item[key].(float64); ok {
+				sum += v
+			}
+			if m == month {
+				break
+			}
+		}
+		result[name] = sum
+	}
+	return result
+}
+
+// FetchYTDSummary fetches the YTD statement summary for the given financial
+// year (e.g., 2026 = FY 2026-27, April 2026–March 2027). One call per FY is
+// sufficient — the response includes all processed months. Callers should
+// cache the result and call YTDForMonth per payslip.
+func (c *Client) FetchYTDSummary(ctx context.Context, fyYear int) (*YTDSummary, error) {
+	sess, err := c.loadSession()
+	if err != nil {
+		return nil, ErrNotConnected
+	}
+	url := fmt.Sprintf("https://%s/v3/api/payroll/ytd-statement-summary/%d/%d/0", sess.Host, sess.ProfileID, fyYear)
+	body, err := c.getRaw(ctx, sess, url)
+	if err != nil {
+		return nil, fmt.Errorf("fetch ytd summary: %w", err)
+	}
+	items, err := parseYTDSummary(body)
+	if err != nil {
+		return nil, err
+	}
+	return &YTDSummary{items: items}, nil
+}
+
+// parseYTDSummary extracts the data array from the YTD statement response.
+func parseYTDSummary(body []byte) ([]map[string]any, error) {
+	var result struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("decode ytd summary: %w", err)
+	}
+	return result.Data, nil
+}
+
 // FetchPayslipData calls the published endpoint and returns the full payslip
 // breakdown as structured JSON.
 func (c *Client) FetchPayslipData(ctx context.Context, payslipID int) (*PayslipData, error) {
