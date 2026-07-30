@@ -432,3 +432,81 @@ func TestTax_KiteUpload_ComputationIncludesCG(t *testing.T) {
 		t.Error("/tax computation should show special-rate tax line (STCG)")
 	}
 }
+
+func TestTax_ExportSection_ShowsInPage(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+
+	doPostForm(srv, "/settings/tax-profile",
+		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+	uploadAIS(srv, []byte(taxAISFixture))
+
+	rec, _ := doGet(srv, "/tax")
+	body := rec.Body.String()
+	if !strings.Contains(body, "Download ITR-2 JSON") {
+		t.Error("/tax should show export button")
+	}
+	if !strings.Contains(body, "incometax.gov.in") {
+		t.Error("/tax export section should link to portal")
+	}
+	if !strings.Contains(body, "e-Verify") {
+		t.Error("/tax export section should mention e-Verify")
+	}
+	if !strings.Contains(body, "Schedule S") {
+		t.Error("/tax export section should show schedule badges")
+	}
+}
+
+func TestTax_Export_NoAIS_ReturnsError(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+
+	rec, _ := doGet(srv, "/tax/export")
+	if rec.Code != 400 {
+		t.Errorf("export without AIS: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestTax_Export_NoProfile_ReturnsError(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+
+	uploadAIS(srv, []byte(taxAISFixture))
+	rec, _ := doGet(srv, "/tax/export")
+	if rec.Code != 400 {
+		t.Errorf("export without profile: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestTax_Export_ReturnsValidJSON(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+
+	doPostForm(srv, "/settings/tax-profile",
+		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+	uploadAIS(srv, []byte(taxAISFixture))
+
+	rec, _ := doGet(srv, "/tax/export")
+	if rec.Code != 200 {
+		t.Fatalf("export: status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Header().Get("Content-Disposition"), "attachment") {
+		t.Errorf("Content-Disposition = %q, want attachment", rec.Header().Get("Content-Disposition"))
+	}
+	if !strings.Contains(rec.Header().Get("Content-Disposition"), "ITR-2_ABCDE1234F_AY2026-27.json") {
+		t.Errorf("Content-Disposition should contain filename with PAN")
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "ITR2") {
+		t.Error("export JSON should contain ITR2 key")
+	}
+	if !strings.Contains(body, "ScheduleS") {
+		t.Error("export JSON should contain ScheduleS")
+	}
+	if !strings.Contains(body, "ABCDE1234F") {
+		t.Error("export JSON should contain PAN")
+	}
+	if !strings.Contains(body, "OptOutNewTaxRegime") {
+		t.Error("export JSON should contain new regime flag")
+	}
+}

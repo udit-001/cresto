@@ -4,10 +4,7 @@
   {{if not .HasAIS}}
   <!-- Empty state: import wizard -->
   <section class="space-y-3">
-    <div>
-      <h2 class="text-xl font-semibold leading-tight text-balance">Tax</h2>
-      <p class="text-sm text-muted-foreground mt-1 text-pretty">Import your AIS to populate salary, interest, dividends, and TDS data for ITR filing.</p>
-    </div>
+    <p class="text-sm text-muted-foreground text-pretty">Import your AIS to populate salary, interest, dividends, and TDS data for ITR filing.</p>
 
     {{if not .HasProfile}}
     <div class="rounded-lg border border-warning/50 bg-warning/5 p-4">
@@ -41,8 +38,8 @@
           <p class="text-sm text-muted-foreground mt-1">Cresto will decrypt it automatically using your PAN and date of birth.</p>
           <form method="POST" action="/tax/ais-upload" enctype="multipart/form-data" class="mt-3">
             <div class="flex items-center gap-3">
-              <input type="file" name="ais" accept=".json,application/json" class="text-sm" required>
-              <button type="submit" class="btn" data-size="sm">Upload & Decrypt</button>
+              <input class="input" type="file" name="ais" accept=".json,application/json" required>
+              <button type="submit" class="btn" data-size="sm">Upload &amp; Decrypt</button>
             </div>
           </form>
         </div>
@@ -63,36 +60,34 @@
 
   <!-- FY Header -->
   <div class="card">
-    <header class="flex items-center justify-between">
-      <div>
-        <h2 class="text-xl font-semibold tracking-tight">FY {{.FY}}</h2>
-        <p class="text-muted-foreground text-sm">AIS imported · ITR-2 · New tax regime{{if .HasKite}} · Kite Console imported{{end}}</p>
-      </div>
-      <div class="flex items-center gap-3">
-        {{if not .HasKite}}
-        <form method="POST" action="/tax/kite-upload" enctype="multipart/form-data" class="flex items-center gap-2">
-          <input type="file" name="kite" accept=".xlsx" class="text-xs" required>
-          <button type="submit" class="btn" data-size="sm">Import Kite Console</button>
-        </form>
-        {{else}}
-        <form method="POST" action="/tax/kite-upload" enctype="multipart/form-data" class="flex items-center gap-2">
-          <input type="file" name="kite" accept=".xlsx" class="text-xs" required>
-          <button type="submit" class="btn" data-variant="outline" data-size="sm">Re-import Kite</button>
-        </form>
-        {{end}}
-        <form method="POST" action="/tax/ais-upload" enctype="multipart/form-data" class="flex items-center gap-2">
-          <input type="file" name="ais" accept=".json,application/json" class="text-xs" required>
-          <button type="submit" class="btn" data-variant="outline" data-size="sm">Re-import AIS</button>
-        </form>
-      </div>
+    <header>
+      <h2 class="text-xl font-semibold tracking-tight">FY {{.FY}}</h2>
+      <p class="text-muted-foreground text-sm">AIS imported · ITR-2 · New tax regime{{if .HasKite}} · Kite Console imported{{end}}</p>
     </header>
+    <section class="mt-4 flex flex-wrap items-center gap-3">
+      <form method="POST" action="/tax/ais-upload" enctype="multipart/form-data" class="flex items-center gap-2">
+        <input class="input" type="file" name="ais" accept=".json,application/json" required>
+        <button type="submit" class="btn" data-variant="outline" data-size="sm">Re-import AIS</button>
+      </form>
+      {{if not .HasKite}}
+      <form method="POST" action="/tax/kite-upload" enctype="multipart/form-data" class="flex items-center gap-2">
+        <input class="input" type="file" name="kite" accept=".xlsx" required>
+        <button type="submit" class="btn" data-size="sm">Import Kite Console</button>
+      </form>
+      {{else}}
+      <form method="POST" action="/tax/kite-upload" enctype="multipart/form-data" class="flex items-center gap-2">
+        <input class="input" type="file" name="kite" accept=".xlsx" required>
+        <button type="submit" class="btn" data-variant="outline" data-size="sm">Re-import Kite</button>
+      </form>
+      {{end}}
+    </section>
   </div>
 
   <!-- Salary per employer -->
   {{if .Salaries}}
   <div class="card">
     <header>
-      <h3 class="font-semibold">Salary (AIS TDS-192)</h3>
+      <h3 class="font-semibold">Salary</h3>
       <p class="text-muted-foreground text-sm">{{len .Salaries}} employer{{if gt (len .Salaries) 1}}s{{end}}</p>
     </header>
     <section class="mt-4">
@@ -129,7 +124,7 @@
   {{if or .SavingsInterest .FDInterest}}
   <div class="card">
     <header>
-      <h3 class="font-semibold">Interest Income (AIS SFT-016)</h3>
+      <h3 class="font-semibold">Interest Income</h3>
       <p class="text-muted-foreground text-sm">Savings + FD · all taxable at slab rate (new regime)</p>
     </header>
     <section class="mt-4">
@@ -145,14 +140,14 @@
           {{range .SavingsInterest}}
           <tr>
             <td class="py-2">{{.Bank}}</td>
-            <td class="py-2 text-muted-foreground">Savings</td>
+            <td class="py-2"><span class="badge" data-variant="secondary">Savings</span></td>
             <td class="text-right py-2 tabular-nums">{{money .Amount}}</td>
           </tr>
           {{end}}
           {{range .FDInterest}}
           <tr>
             <td class="py-2">{{.Bank}}</td>
-            <td class="py-2 text-muted-foreground">FD</td>
+            <td class="py-2"><span class="badge" data-variant="outline">FD</span></td>
             <td class="text-right py-2 tabular-nums">{{money .Amount}}</td>
           </tr>
           {{end}}
@@ -170,7 +165,7 @@
   {{if .Dividends}}
   <div class="card">
     <header>
-      <h3 class="font-semibold">Dividends (AIS SFT-015)</h3>
+      <h3 class="font-semibold">Dividends</h3>
       <p class="text-muted-foreground text-sm">{{len .Dividends}} entries</p>
     </header>
     <section class="mt-4">
@@ -362,8 +357,8 @@
   {{if .Securities}}
   <div class="card">
     <header>
-      <h3 class="font-semibold">Securities Sales (AIS SFT-17-LES)</h3>
-      <p class="text-muted-foreground text-sm">Cross-verify with Kite Console Tax P&L (PF-80)</p>
+      <h3 class="font-semibold">Securities Sales</h3>
+      <p class="text-muted-foreground text-sm">Cross-verify with Kite Console Tax P&L</p>
     </header>
     <section class="mt-4">
       <table class="table w-full">
@@ -378,7 +373,7 @@
         <tbody class="text-sm">
           {{range .Securities}}
           <tr>
-            <td class="py-2 text-xs">{{.SecurityName}}</td>
+            <td class="py-2 text-xs max-w-xs truncate" title="{{.SecurityName}}">{{.SecurityName}}</td>
             <td class="text-right py-2 tabular-nums">{{money .SalesConsideration}}</td>
             <td class="text-right py-2 tabular-nums">{{money .CostOfAcquisition}}</td>
             <td class="text-center py-2 text-xs">{{.Type}}</td>
@@ -394,7 +389,7 @@
   {{if .AdvanceTax}}
   <div class="card">
     <header>
-      <h3 class="font-semibold">Tax Payments (AIS paymentOfTaxes)</h3>
+      <h3 class="font-semibold">Tax Payments</h3>
       <p class="text-muted-foreground text-sm">Advance tax / self-assessment tax</p>
     </header>
     <section class="mt-4">
@@ -477,6 +472,57 @@
     </section>
   </div>
   {{end}}
+
+  <!-- Export -->
+  <div class="card">
+    <header class="flex items-center justify-between">
+      <div>
+        <h3 class="font-semibold">Export ITR-2 JSON</h3>
+        <p class="text-sm text-muted-foreground mt-1">Upload directly to the income tax portal — no offline utility required.</p>
+      </div>
+      <a href="/tax/export" class="btn" data-size="lg">Download ITR-2 JSON</a>
+    </header>
+    <section class="mt-4 pt-4 border-t">
+      <div class="flex flex-wrap gap-2">
+        <span class="badge" data-variant="secondary">Schedule S</span>
+        <span class="badge" data-variant="secondary">Schedule OS</span>
+        <span class="badge" data-variant="secondary">Schedule CG</span>
+        {{if .CGTrades}}<span class="badge" data-variant="secondary">Schedule 112A</span>{{end}}
+        <span class="badge" data-variant="secondary">Schedule TDS-1</span>
+        <span class="badge" data-variant="secondary">Schedule TDS-2</span>
+        <span class="badge" data-variant="secondary">Schedule IT</span>
+        <span class="badge" data-variant="secondary">Part B-TI</span>
+        <span class="badge" data-variant="secondary">Part B-TTI</span>
+        <span class="badge" data-variant="outline">Bank account</span>
+        <span class="badge" data-variant="outline">Verification</span>
+      </div>
+    </section>
+    <section class="mt-4 pt-4 border-t">
+      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">After downloading</p>
+      <ol class="text-sm space-y-2.5">
+        <li class="flex gap-3 items-start">
+          <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex-none mt-0.5">1</span>
+          <span>Go to <a href="https://www.incometax.gov.in" class="underline">incometax.gov.in</a> and log in</span>
+        </li>
+        <li class="flex gap-3 items-start">
+          <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex-none mt-0.5">2</span>
+          <span><span class="font-medium">e-File</span> → <span class="font-medium">Income Tax Returns</span> → <span class="font-medium">File Income Tax Return</span></span>
+        </li>
+        <li class="flex gap-3 items-start">
+          <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex-none mt-0.5">3</span>
+          <span>Select <span class="font-medium">AY 2026-27</span>, Mode = <span class="font-medium">Offline</span>, ITR Form = <span class="font-medium">2</span></span>
+        </li>
+        <li class="flex gap-3 items-start">
+          <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex-none mt-0.5">4</span>
+          <span>Attach the downloaded JSON file — the portal validates it automatically</span>
+        </li>
+        <li class="flex gap-3 items-start">
+          <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex-none mt-0.5">5</span>
+          <span>Proceed to Verification → e-Verify (Aadhaar OTP / Net Banking / Bank EVC)</span>
+        </li>
+      </ol>
+    </section>
+  </div>
 
   {{end}}
 </div>

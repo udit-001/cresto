@@ -522,6 +522,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /tax", s.handleTax)
 	mux.HandleFunc("POST /tax/ais-upload", s.handleTaxAISUpload)
 	mux.HandleFunc("POST /tax/kite-upload", s.handleTaxKiteUpload)
+	mux.HandleFunc("GET /tax/export", s.handleTaxExport)
 
 	// Static assets: CSS, JS. fs.Sub scopes the embed to /static.
 	staticFS, err := fs.Sub(contentFS, "static")

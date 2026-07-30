@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"cresto/internal/ais"
+	"cresto/internal/itr"
 	"cresto/internal/kiteconsole"
 	"cresto/internal/store"
 	"cresto/internal/tax"
@@ -346,4 +347,87 @@ func (s *Server) handleTaxKiteUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/tax?toast=Kite Console imported&variant=success", http.StatusSeeOther)
+}
+
+// handleTaxExport generates an ITR-2 JSON for the current FY and returns it
+// as a downloadable file. Requires AIS import + taxpayer profile.
+func (s *Server) handleTaxExport(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	imports, _ := s.store.ListAISImports(ctx)
+	if len(imports) == 0 {
+		s.renderError(w, http.StatusBadRequest, "Import your AIS first before exporting.")
+		return
+	}
+	im := imports[0]
+
+	prof, err := s.store.GetTaxpayerProfile(ctx)
+	if err != nil {
+		s.renderError(w, http.StatusBadRequest, "Set up your Tax Profile first (PAN, DOB, verification details).")
+		return
+	}
+
+	raw, err := os.ReadFile(im.RawJSONPath)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, "Could not read AIS data: "+err.Error())
+		return
+	}
+	parsed, err := ais.Parse(raw)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, "Could not parse AIS data: "+err.Error())
+		return
+	}
+
+	cgTrades, _ := s.store.ListCapitalGainsTrades(ctx, im.FYStartYear)
+	bankAccounts, _ := s.store.ListBankAccounts(ctx)
+
+	var totalSTCG, totalLTCG float64
+	for _, tr := range cgTrades {
+		if strings.Contains(tr.Section, "Short Term") {
+			totalSTCG += tr.TaxableProfit
+		} else if strings.Contains(tr.Section, "Long Term") {
+			totalLTCG += tr.TaxableProfit
+		}
+	}
+
+	var totalSalary, totalSavings, totalFD, totalDiv float64
+	for _, sal := range parsed.Salaries {
+		totalSalary += sal.GrossSalary
+	}
+	for _, si := range parsed.SavingsInterest {
+		totalSavings += si.Amount
+	}
+	for _, fd := range parsed.FDInterest {
+		totalFD += fd.Amount
+	}
+	for _, d := range parsed.Dividends {
+		totalDiv += d.Amount
+	}
+
+	breakdown := tax.Compute(tax.Input{
+		GrossSalary:     totalSalary,
+		SavingsInterest: totalSavings,
+		FDInterest:      totalFD,
+		Dividends:       totalDiv,
+		STCG:            totalSTCG,
+		LTCG:            totalLTCG,
+	})
+
+	data, err := itr.Generate(itr.Input{
+		Profile:      prof,
+		BankAccounts: bankAccounts,
+		AIS:          parsed,
+		CGTrades:     cgTrades,
+		TaxBreakdown: breakdown,
+		FYStartYear:  im.FYStartYear,
+	})
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, "Could not generate ITR-2 JSON: "+err.Error())
+		return
+	}
+
+	filename := fmt.Sprintf("ITR-2_%s_AY2026-27.json", prof.PAN)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	w.Write(data)
 }
