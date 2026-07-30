@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/xuri/excelize/v2"
 )
 
 const taxAISFixture = `{
@@ -311,4 +313,122 @@ func tdsReconSnippet(body string) string {
 		end = len(body)
 	}
 	return body[idx:end]
+}
+
+func buildKiteFixtureXLSX(t *testing.T) []byte {
+	t.Helper()
+	f := excelize.NewFile()
+	defer f.Close()
+	orig := f.GetSheetName(0)
+	f.SetSheetName(orig, "Tradewise Exits from 2025-04-01")
+	sheetName := "Tradewise Exits from 2025-04-01"
+	f.SetCellValue(sheetName, "A1", " ")
+
+	set := func(row, col int, val string) {
+		axis, _ := excelize.CoordinatesToCellName(col, row)
+		f.SetCellValue(sheetName, axis, val)
+	}
+
+	set(24, 2, "Equity - Short Term")
+	headers := []string{"", "Symbol", "ISIN", "Entry Date", "Exit Date", "Quantity",
+		"Buy Value", "Sell Value", "Profit", "Period of Holding",
+		"Fair Market Value", "Taxable Profit", "Turnover", "Brokerage",
+		"Exchange Transaction Charges", "IPFT", "SEBI Charges",
+		"CGST", "SGST", "IGST", "Stamp Duty", "STT"}
+	for i, h := range headers {
+		set(26, i+1, h)
+	}
+	set(27, 2, "TESTSTOCK")
+	set(27, 3, "INE999")
+	set(27, 4, "2024-11-06")
+	set(27, 5, "2025-09-22")
+	set(27, 6, "1")
+	set(27, 7, "1000")
+	set(27, 8, "1500")
+	set(27, 9, "500")
+	set(27, 10, "321 days")
+	set(27, 11, "0")
+	set(27, 12, "500")
+	for i := 13; i <= 20; i++ {
+		set(27, i, "0")
+	}
+	set(27, 22, "1.50")
+
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		t.Fatalf("f.Write: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func uploadKite(srv *Server, xlsxData []byte) *httptest.ResponseRecorder {
+	body := &bytes.Buffer{}
+	w := multipart.NewWriter(body)
+	part, _ := w.CreateFormFile("kite", "taxpnl.xlsx")
+	part.Write(xlsxData)
+	w.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/tax/kite-upload", body)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	return rec
+}
+
+func TestTax_KiteUpload_NoAIS_ReturnsError(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+
+	rec := uploadKite(srv, buildKiteFixtureXLSX(t))
+	if rec.Code != 400 {
+		t.Errorf("kite upload without AIS: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestTax_KiteUpload_ThenDisplay(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+
+	doPostForm(srv, "/settings/tax-profile",
+		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+	uploadAIS(srv, []byte(taxAISFixture))
+
+	rec := uploadKite(srv, buildKiteFixtureXLSX(t))
+	if rec.Code != 303 {
+		t.Fatalf("kite upload: status = %d, want 303, body: %s", rec.Code, rec.Body.String())
+	}
+
+	rec, _ = doGet(srv, "/tax")
+	body := rec.Body.String()
+	if !strings.Contains(body, "Capital Gains") {
+		t.Error("/tax should show Capital Gains card after Kite upload")
+	}
+	if !strings.Contains(body, "TESTSTOCK") {
+		t.Error("/tax should show trade symbol TESTSTOCK")
+	}
+	if !strings.Contains(body, "1,500") {
+		t.Error("/tax should show sell value 1,500")
+	}
+	if !strings.Contains(body, "STCG @ 20%") {
+		t.Error("/tax should show STCG type label")
+	}
+	if !strings.Contains(body, "Kite Console imported") {
+		t.Error("/tax should show Kite Console imported status")
+	}
+}
+
+func TestTax_KiteUpload_ComputationIncludesCG(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+
+	doPostForm(srv, "/settings/tax-profile",
+		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+	uploadAIS(srv, []byte(taxAISFixture))
+	uploadKite(srv, buildKiteFixtureXLSX(t))
+
+	rec, _ := doGet(srv, "/tax")
+	body := rec.Body.String()
+	if !strings.Contains(body, "special rates") {
+		t.Error("/tax computation should show special-rate tax line (STCG)")
+	}
 }

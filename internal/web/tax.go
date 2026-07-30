@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"cresto/internal/ais"
+	"cresto/internal/kiteconsole"
 	"cresto/internal/store"
 	"cresto/internal/tax"
 )
@@ -20,6 +21,7 @@ import (
 // reconciliation against Cresto payslips.
 type taxView struct {
 	HasAIS      bool
+	HasKite     bool
 	HasProfile  bool
 	FY          string
 	FYStartYear int
@@ -32,6 +34,7 @@ type taxView struct {
 	TDSRecon        []TDSRecon
 	Securities      []ais.SecuritySale
 	AdvanceTax      []ais.AdvanceTaxEntry
+	CGTrades        []store.CapitalGainsTrade
 
 	TotalSalary    float64
 	TotalSavings   float64
@@ -39,6 +42,10 @@ type taxView struct {
 	TotalInterest  float64
 	TotalDividends float64
 	TotalAISTDS    float64
+	TotalSTCG      float64
+	TotalLTCG      float64
+	CGBuy          float64
+	CGSell         float64
 
 	TaxBreakdown tax.Breakdown
 	RefundDue    float64
@@ -84,6 +91,32 @@ func (s *Server) handleTax(w http.ResponseWriter, r *http.Request) {
 				s.populateTaxView(ctx, &v, &parsed, im.FYStartYear)
 			}
 		}
+
+		if has, _ := s.store.HasCapitalGains(ctx, im.FYStartYear); has {
+			v.HasKite = true
+			trades, _ := s.store.ListCapitalGainsTrades(ctx, im.FYStartYear)
+			v.CGTrades = trades
+			for _, tr := range trades {
+				if strings.Contains(tr.Section, "Short Term") {
+					v.TotalSTCG += tr.TaxableProfit
+				} else if strings.Contains(tr.Section, "Long Term") {
+					v.TotalLTCG += tr.TaxableProfit
+				}
+				v.CGBuy += tr.BuyValue
+				v.CGSell += tr.SellValue
+			}
+		}
+
+		v.TaxBreakdown = tax.Compute(tax.Input{
+			GrossSalary:     v.TotalSalary,
+			SavingsInterest: v.TotalSavings,
+			FDInterest:      v.TotalFD,
+			Dividends:       v.TotalDividends,
+			STCG:            v.TotalSTCG,
+			LTCG:            v.TotalLTCG,
+		})
+		v.RefundDue = v.TotalAISTDS - v.TaxBreakdown.TotalTaxLiability
+		v.HasRefund = v.RefundDue > 0
 	}
 
 	s.render(w, "tax", struct {
@@ -231,16 +264,6 @@ func (s *Server) populateTaxView(ctx context.Context, v *taxView, parsed *ais.Pa
 
 		v.TDSRecon = append(v.TDSRecon, recon)
 	}
-
-	v.TaxBreakdown = tax.Compute(tax.Input{
-		GrossSalary:     v.TotalSalary,
-		SavingsInterest: v.TotalSavings,
-		FDInterest:      v.TotalFD,
-		Dividends:       v.TotalDividends,
-	})
-
-	v.RefundDue = v.TotalAISTDS - v.TaxBreakdown.TotalTaxLiability
-	v.HasRefund = v.RefundDue > 0
 }
 
 func (s *Server) hasTaxProfile(ctx context.Context) bool {
@@ -260,4 +283,67 @@ func matchEmployerTDS(aisName string, employers map[string]store.EmployerTDS) (s
 		}
 	}
 	return store.EmployerTDS{}, false
+}
+
+// handleTaxKiteUpload accepts a Kite Console Tax P&L XLSX file, parses it,
+// stores the trades, and redirects to /tax. Requires an AIS import to exist
+// first (to determine the FY).
+func (s *Server) handleTaxKiteUpload(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	imports, _ := s.store.ListAISImports(ctx)
+	if len(imports) == 0 {
+		s.renderError(w, http.StatusBadRequest, "Import your AIS first — Cresto needs the FY from AIS before importing Kite Console data.")
+		return
+	}
+	fyStartYear := imports[0].FYStartYear
+
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		s.renderError(w, http.StatusBadRequest, "Could not read upload: "+err.Error())
+		return
+	}
+
+	file, _, err := r.FormFile("kite")
+	if err != nil {
+		s.renderError(w, http.StatusBadRequest, "No Kite Console file provided.")
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		s.renderError(w, http.StatusBadRequest, "Could not read uploaded file: "+err.Error())
+		return
+	}
+
+	summary, err := kiteconsole.Parse(data)
+	if err != nil {
+		s.renderError(w, http.StatusBadRequest, "Could not parse Kite Console XLSX: "+err.Error())
+		return
+	}
+
+	trades := make([]store.CapitalGainsTrade, 0, len(summary.Trades))
+	for _, t := range summary.Trades {
+		trades = append(trades, store.CapitalGainsTrade{
+			Section:       t.Section,
+			Symbol:        t.Symbol,
+			ISIN:          t.ISIN,
+			EntryDate:     t.EntryDate,
+			ExitDate:      t.ExitDate,
+			Quantity:      t.Quantity,
+			BuyValue:      t.BuyValue,
+			SellValue:     t.SellValue,
+			Profit:        t.Profit,
+			TaxableProfit: t.TaxableProfit,
+			FMV:           t.FMV,
+			STT:           t.STT,
+		})
+	}
+
+	if err := s.store.SaveCapitalGainsTrades(ctx, fyStartYear, trades); err != nil {
+		s.renderError(w, http.StatusInternalServerError, "Could not save trades: "+err.Error())
+		return
+	}
+
+	http.Redirect(w, r, "/tax?toast=Kite Console imported&variant=success", http.StatusSeeOther)
 }

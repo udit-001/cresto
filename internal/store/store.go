@@ -1770,3 +1770,95 @@ func (s *Store) GetFYEmployerTDS(ctx context.Context, fyStartYear int) ([]Employ
 	}
 	return out, nil
 }
+
+// CapitalGainsTrade is one FIFO-matched exit from Kite Console's Tax P&L.
+// Zerodha pre-computes FIFO matching, holding period classification, and
+// grandfathering — Cresto just stores and displays.
+type CapitalGainsTrade struct {
+	ID            int64
+	FYStartYear   int
+	Section       string
+	Symbol        string
+	ISIN          string
+	EntryDate     string
+	ExitDate      string
+	Quantity      float64
+	BuyValue      float64
+	SellValue     float64
+	Profit        float64
+	TaxableProfit float64
+	FMV           float64
+	STT           float64
+	ImportedAt    string
+}
+
+// SaveCapitalGainsTrades replaces all trades for the given FY with the
+// provided batch. Existing rows are deleted first (idempotent re-import).
+func (s *Store) SaveCapitalGainsTrades(ctx context.Context, fyStartYear int, trades []CapitalGainsTrade) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM capital_gains_trades WHERE fy_start_year = ?`, fyStartYear); err != nil {
+		return err
+	}
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO capital_gains_trades
+		 (fy_start_year, section, symbol, isin, entry_date, exit_date,
+		  quantity, buy_value, sell_value, profit, taxable_profit, fmv, stt)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, t := range trades {
+		if _, err := stmt.ExecContext(ctx,
+			fyStartYear, t.Section, t.Symbol, t.ISIN, t.EntryDate, t.ExitDate,
+			t.Quantity, t.BuyValue, t.SellValue, t.Profit, t.TaxableProfit,
+			t.FMV, t.STT); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ListCapitalGainsTrades returns all trades for the given FY, ordered by
+// section then symbol.
+func (s *Store) ListCapitalGainsTrades(ctx context.Context, fyStartYear int) ([]CapitalGainsTrade, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, fy_start_year, section, symbol, isin, entry_date, exit_date,
+		        quantity, buy_value, sell_value, profit, taxable_profit, fmv, stt, imported_at
+		 FROM capital_gains_trades
+		 WHERE fy_start_year = ?
+		 ORDER BY section, symbol`, fyStartYear)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CapitalGainsTrade
+	for rows.Next() {
+		var t CapitalGainsTrade
+		if err := rows.Scan(&t.ID, &t.FYStartYear, &t.Section, &t.Symbol, &t.ISIN,
+			&t.EntryDate, &t.ExitDate, &t.Quantity, &t.BuyValue, &t.SellValue,
+			&t.Profit, &t.TaxableProfit, &t.FMV, &t.STT, &t.ImportedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// HasCapitalGains returns true if any trades exist for the given FY.
+func (s *Store) HasCapitalGains(ctx context.Context, fyStartYear int) (bool, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM capital_gains_trades WHERE fy_start_year = ?`, fyStartYear).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

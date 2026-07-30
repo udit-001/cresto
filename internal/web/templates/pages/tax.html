@@ -47,6 +47,14 @@
           </form>
         </div>
       </div>
+
+      <div class="flex items-start gap-3 opacity-50">
+        <span class="flex-none inline-flex items-center justify-center w-6 h-6 rounded-full bg-muted text-muted-foreground text-xs font-semibold mt-0.5">3</span>
+        <div>
+          <p class="font-medium">Capital gains (optional)</p>
+          <p class="text-sm text-muted-foreground mt-1">After AIS import, upload your Kite Console Tax P&L for capital gains data.</p>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -58,12 +66,25 @@
     <header class="flex items-center justify-between">
       <div>
         <h2 class="text-xl font-semibold tracking-tight">FY {{.FY}}</h2>
-        <p class="text-muted-foreground text-sm">AIS imported · ITR-2 · New tax regime</p>
+        <p class="text-muted-foreground text-sm">AIS imported · ITR-2 · New tax regime{{if .HasKite}} · Kite Console imported{{end}}</p>
       </div>
-      <form method="POST" action="/tax/ais-upload" enctype="multipart/form-data" class="flex items-center gap-2">
-        <input type="file" name="ais" accept=".json,application/json" class="text-xs" required>
-        <button type="submit" class="btn" data-variant="outline" data-size="sm">Re-import</button>
-      </form>
+      <div class="flex items-center gap-3">
+        {{if not .HasKite}}
+        <form method="POST" action="/tax/kite-upload" enctype="multipart/form-data" class="flex items-center gap-2">
+          <input type="file" name="kite" accept=".xlsx" class="text-xs" required>
+          <button type="submit" class="btn" data-size="sm">Import Kite Console</button>
+        </form>
+        {{else}}
+        <form method="POST" action="/tax/kite-upload" enctype="multipart/form-data" class="flex items-center gap-2">
+          <input type="file" name="kite" accept=".xlsx" class="text-xs" required>
+          <button type="submit" class="btn" data-variant="outline" data-size="sm">Re-import Kite</button>
+        </form>
+        {{end}}
+        <form method="POST" action="/tax/ais-upload" enctype="multipart/form-data" class="flex items-center gap-2">
+          <input type="file" name="ais" accept=".json,application/json" class="text-xs" required>
+          <button type="submit" class="btn" data-variant="outline" data-size="sm">Re-import AIS</button>
+        </form>
+      </div>
     </header>
   </div>
 
@@ -399,6 +420,58 @@
             <td class="py-2 text-xs font-mono text-muted-foreground">{{.BSRCode}} / {{.Challan}}</td>
           </tr>
           {{end}}
+        </tbody>
+      </table>
+    </section>
+  </div>
+  {{end}}
+
+  <!-- Capital Gains (Kite Console) -->
+  {{if .CGTrades}}
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">Capital Gains</h3>
+      <p class="text-muted-foreground text-sm">From Kite Console Tax P&amp;L · {{len .CGTrades}} trade{{if gt (len .CGTrades) 1}}s{{end}}</p>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <thead>
+          <tr class="text-xs text-muted-foreground">
+            <th class="text-left py-2">Symbol</th>
+            <th class="text-right py-2">Buy Value</th>
+            <th class="text-right py-2">Sell Value</th>
+            <th class="text-right py-2">Taxable P&amp;L</th>
+            <th class="text-right py-2">STT</th>
+            <th class="text-center py-2">Type</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm">
+          {{range .CGTrades}}
+          <tr>
+            <td class="py-2">{{.Symbol}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .BuyValue}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .SellValue}}</td>
+            <td class="text-right py-2 tabular-nums {{if neg .TaxableProfit}}text-destructive{{else}}text-success{{end}}">{{sign .TaxableProfit}}{{money .TaxableProfit}}</td>
+            <td class="text-right py-2 tabular-nums text-muted-foreground">{{money .STT}}</td>
+            <td class="text-center py-2 text-xs">{{if eq .Section "Equity - Short Term"}}STCG @ 20%{{else if eq .Section "Equity - Long Term"}}LTCG @ 12.5%{{else}}{{.Section}}{{end}}</td>
+          </tr>
+          {{end}}
+          <tr class="border-t font-medium">
+            <td class="py-3">Total STCG</td>
+            <td class="text-right py-3 tabular-nums text-muted-foreground">{{money .CGBuy}}</td>
+            <td class="text-right py-3 tabular-nums text-muted-foreground">{{money .CGSell}}</td>
+            <td class="text-right py-3 tabular-nums">{{money .TotalSTCG}}</td>
+            <td class="py-3"></td>
+            <td class="py-3"></td>
+          </tr>
+          <tr>
+            <td class="py-2 text-muted-foreground">Total LTCG</td>
+            <td class="text-right py-2 tabular-nums text-muted-foreground">—</td>
+            <td class="text-right py-2 tabular-nums text-muted-foreground">—</td>
+            <td class="text-right py-2 tabular-nums text-muted-foreground">{{money .TotalLTCG}}</td>
+            <td class="py-2"></td>
+            <td class="py-2"></td>
+          </tr>
         </tbody>
       </table>
     </section>
