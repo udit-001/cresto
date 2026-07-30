@@ -127,7 +127,7 @@ func TestTax_EmptyState_WithProfile_NoWarning(t *testing.T) {
 	defer cleanup()
 
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+		"pan=ABCDE1234F&dob=1990-06-15&declarant_name=John+Doe&verification_place=Anytown")
 
 	rec, _ := doGet(srv, "/tax")
 	body := rec.Body.String()
@@ -151,11 +151,11 @@ func TestTax_Upload_ThenDisplay(t *testing.T) {
 	defer cleanup()
 
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+		"pan=ABCDE1234F&dob=1990-06-15&declarant_name=John+Doe&verification_place=Anytown")
 
 	rec := uploadAIS(srv, []byte(taxAISFixture))
-	if rec.Code != 303 {
-		t.Fatalf("upload AIS: status = %d, want 303, body: %s", rec.Code, rec.Body.String())
+	if rec.Code != 200 {
+		t.Fatalf("upload AIS: status = %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}
 
 	rec, _ = doGet(srv, "/tax")
@@ -194,7 +194,7 @@ func TestTax_Upload_TDSReconciliation_WithPayslips(t *testing.T) {
 	defer cleanup()
 
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+		"pan=ABCDE1234F&dob=1990-06-15&declarant_name=John+Doe&verification_place=Anytown")
 
 	p := seedPayslip(t, srv)
 	p.EmployerName = "Test Corp Pvt Ltd"
@@ -223,7 +223,7 @@ func TestTax_Upload_TDSReconciliation_Gap(t *testing.T) {
 	defer cleanup()
 
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+		"pan=ABCDE1234F&dob=1990-06-15&declarant_name=John+Doe&verification_place=Anytown")
 
 	p := seedPayslip(t, srv)
 	p.EmployerName = "Test Corp Pvt Ltd"
@@ -252,7 +252,7 @@ func TestTax_ComputationCard_ShowsBreakdown(t *testing.T) {
 	defer cleanup()
 
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+		"pan=ABCDE1234F&dob=1990-06-15&declarant_name=John+Doe&verification_place=Anytown")
 	uploadAIS(srv, []byte(taxAISFixture))
 
 	rec, _ := doGet(srv, "/tax")
@@ -276,7 +276,7 @@ func TestTax_RefundDues_ShowsBalanceDue(t *testing.T) {
 	defer cleanup()
 
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+		"pan=ABCDE1234F&dob=1990-06-15&declarant_name=John+Doe&verification_place=Anytown")
 	uploadAIS(srv, []byte(taxAISFixture))
 
 	rec, _ := doGet(srv, "/tax")
@@ -284,7 +284,7 @@ func TestTax_RefundDues_ShowsBalanceDue(t *testing.T) {
 	if !strings.Contains(body, "Balance Due") && !strings.Contains(body, "Refund") {
 		t.Error("/tax should show refund or balance due section")
 	}
-	if !strings.Contains(body, "TDS Paid") {
+	if !strings.Contains(body, "TDS") {
 		t.Error("/tax should show TDS paid amount")
 	}
 }
@@ -390,12 +390,12 @@ func TestTax_KiteUpload_ThenDisplay(t *testing.T) {
 	defer cleanup()
 
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+		"pan=ABCDE1234F&dob=1990-06-15&declarant_name=John+Doe&verification_place=Anytown")
 	uploadAIS(srv, []byte(taxAISFixture))
 
 	rec := uploadKite(srv, buildKiteFixtureXLSX(t))
-	if rec.Code != 303 {
-		t.Fatalf("kite upload: status = %d, want 303, body: %s", rec.Code, rec.Body.String())
+	if rec.Code != 200 {
+		t.Fatalf("kite upload: status = %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}
 
 	rec, _ = doGet(srv, "/tax")
@@ -422,7 +422,7 @@ func TestTax_KiteUpload_ComputationIncludesCG(t *testing.T) {
 	defer cleanup()
 
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+		"pan=ABCDE1234F&dob=1990-06-15&declarant_name=John+Doe&verification_place=Anytown")
 	uploadAIS(srv, []byte(taxAISFixture))
 	uploadKite(srv, buildKiteFixtureXLSX(t))
 
@@ -438,7 +438,7 @@ func TestTax_ExportSection_ShowsInPage(t *testing.T) {
 	defer cleanup()
 
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+		"pan=ABCDE1234F&dob=1990-06-15&declarant_name=John+Doe&verification_place=Anytown")
 	uploadAIS(srv, []byte(taxAISFixture))
 
 	rec, _ := doGet(srv, "/tax")
@@ -483,7 +483,7 @@ func TestTax_Export_ReturnsValidJSON(t *testing.T) {
 	defer cleanup()
 
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=ABCDE1234F&dob=15061990&declarant_name=Test+User&verification_place=Bangalore")
+		"pan=ABCDE1234F&dob=1990-06-15&declarant_name=John+Doe&verification_place=Anytown")
 	uploadAIS(srv, []byte(taxAISFixture))
 
 	rec, _ := doGet(srv, "/tax/export")

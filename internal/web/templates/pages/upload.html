@@ -38,15 +38,15 @@
   <div class="h-px bg-border flex-1"></div>
 </div>
 
-<div class="card">
-  <section class="flex items-center justify-between gap-4">
-    <div class="flex items-center gap-3">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground shrink-0"><path d="M12 13v8l-4-4"/><path d="m12 21 4-4"/><path d="M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284"/></svg>
-      <div>
-        <div class="font-medium">Fetch from greytHR</div>
-        <p class="text-sm text-muted-foreground">Import payslips you haven't fetched yet from greytHR.</p>
-      </div>
-    </div>
+<article class="item" data-variant="outline">
+  <figure>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground shrink-0"><path d="M12 13v8l-4-4"/><path d="m12 21 4-4"/><path d="M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284"/></svg>
+  </figure>
+  <section>
+    <h3>Fetch from greytHR</h3>
+    <p>Import payslips you haven't fetched yet from greytHR.</p>
+  </section>
+  <aside>
     {{if .GreytHRConnected}}
     <form method="POST" action="/greythr/fetch">
       <button type="submit" class="btn" data-size="sm">Fetch payslips</button>
@@ -54,8 +54,8 @@
     {{else}}
     <a href="/greythr" class="btn" data-variant="outline" data-size="sm">Connect greytHR</a>
     {{end}}
-  </section>
-</div>
+  </aside>
+</article>
 
 <script>
   const input = document.getElementById('pdf');

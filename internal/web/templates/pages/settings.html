@@ -1,283 +1,405 @@
 {{define "page"}}
-<div class="space-y-8">
-  <!-- Brokers -->
-  <section class="space-y-3">
-    <div>
-      <h2 class="text-xl font-semibold leading-tight text-balance">Brokers</h2>
-      <p class="text-sm text-muted-foreground mt-1 text-pretty">Manage your broker connections. Cresto stores only access tokens — your credentials stay with your broker.</p>
+<section class="rounded-lg border bg-card overflow-hidden">
+  <header class="border-b px-3 pt-2">
+    <div class="tabs" id="settings-tabs">
+      <nav role="tablist" aria-orientation="horizontal" data-variant="line">
+        <button type="button" role="tab" id="settings-tab-connections" aria-controls="settings-panel-connections" aria-selected="{{if eq .ActiveTab "connections"}}true{{else}}false{{end}}" tabindex="{{if eq .ActiveTab "connections"}}0{{else}}-1{{end}}">Connections</button>
+        <button type="button" role="tab" id="settings-tab-tax" aria-controls="settings-panel-tax" aria-selected="{{if eq .ActiveTab "tax"}}true{{else}}false{{end}}" tabindex="{{if eq .ActiveTab "tax"}}0{{else}}-1{{end}}">Tax</button>
+        <button type="button" role="tab" id="settings-tab-engine" aria-controls="settings-panel-engine" aria-selected="{{if eq .ActiveTab "engine"}}true{{else}}false{{end}}" tabindex="{{if eq .ActiveTab "engine"}}0{{else}}-1{{end}}">Engine</button>
+      </nav>
     </div>
+  </header>
 
-    <!-- Groww -->
-    <div class="flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
-      <div class="flex items-center gap-3">
-        {{if .Groww.Connected}}
-        <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        {{else if .Groww.Expired}}
-        <svg class="text-warning" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
-        {{else}}
-        <svg class="text-muted-foreground" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
-        {{end}}
-        <div>
-          <div class="font-medium">Groww</div>
-          <div class="text-sm {{if .Groww.Connected}}text-success{{else if .Groww.Expired}}text-warning{{else}}text-muted-foreground{{end}}">
+  <!-- Connections: brokers + greytHR -->
+  <div role="tabpanel" id="settings-panel-connections" aria-labelledby="settings-tab-connections" tabindex="-1" class="p-6"{{if ne .ActiveTab "connections"}} hidden{{end}}>
+    <div class="item-group" role="list">
+      <!-- Groww -->
+      <article class="item" data-variant="outline" role="listitem">
+        <figure>
+          <span class="inline-block w-2.5 h-2.5 rounded-full {{if .Groww.Connected}}bg-success{{else if .Groww.Expired}}bg-warning{{else}}bg-muted-foreground/40{{end}}"></span>
+        </figure>
+        <section>
+          <h3>Groww</h3>
+          <p class="{{if .Groww.Connected}}text-success{{else if .Groww.Expired}}text-warning{{end}}">
             {{if .Groww.Connected}}Connected{{else if .Groww.Expired}}Session expired{{else}}Not connected{{end}}
-          </div>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        {{if .Groww.Connected}}
-        <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('groww-disconnect-dialog').showModal()">Disconnect</button>
-        {{else}}
-        <a href="/groww/connect" class="btn" data-variant="outline" data-size="sm">{{if .Groww.Expired}}Reconnect{{else}}Connect{{end}}</a>
-        {{end}}
-      </div>
-    </div>
-
-    <!-- Kite -->
-    <div class="flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
-      <div class="flex items-center gap-3">
-        {{if .Kite.Connected}}
-        <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        {{else if .Kite.Expired}}
-        <svg class="text-warning" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
-        {{else}}
-        <svg class="text-muted-foreground" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
-        {{end}}
-        <div>
-          <div class="font-medium">Kite <span class="text-muted-foreground font-normal text-sm">(Zerodha)</span></div>
-          <div class="text-sm {{if .Kite.Connected}}text-success{{else if .Kite.Expired}}text-warning{{else}}text-muted-foreground{{end}}">
-            {{if .Kite.Connected}}Connected{{else if .Kite.Expired}}Session expired{{else}}Not connected{{end}}
-          </div>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        {{if .Kite.Connected}}
-        <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('kite-disconnect-dialog').showModal()">Disconnect</button>
-        {{else}}
-        <a href="/kite/connect" class="btn" data-variant="outline" data-size="sm">{{if .Kite.Expired}}Reconnect{{else}}Connect{{end}}</a>
-        {{end}}
-      </div>
-    </div>
-  </section>
-
-  <!-- greytHR -->
-  <section class="space-y-3">
-    <div>
-      <h2 class="text-xl font-semibold leading-tight text-balance">greytHR</h2>
-      <p class="text-sm text-muted-foreground mt-1 text-pretty">Auto-fetch payslips from your greytHR ESS portal. Uses greytHR's JSON API — no LLM extraction needed.</p>
-    </div>
-
-    <div class="flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
-      <div class="flex items-center gap-3">
-        {{if .GreytHR.Connected}}
-        <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        {{else}}
-        <svg class="text-muted-foreground" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
-        {{end}}
-        <div>
-          <div class="font-medium">greytHR {{if .GreytHR.Host}}<span class="text-muted-foreground font-normal text-sm">({{.GreytHR.Host}})</span>{{end}}</div>
-          <div class="text-sm {{if .GreytHR.Connected}}text-success{{else}}text-muted-foreground{{end}}">
-            {{if .GreytHR.Connected}}Connected{{else}}Not connected{{end}}
-          </div>
-        </div>
-      </div>
-      <a href="/greythr" class="btn" data-variant="outline" data-size="sm">{{if .GreytHR.Connected}}Manage{{else}}Connect{{end}}</a>
-    </div>
-  </section>
-
-  <!-- Tax Profile -->
-  <section class="space-y-3">
-    <div>
-      <h2 class="text-xl font-semibold leading-tight text-balance">Tax Profile</h2>
-      <p class="text-sm text-muted-foreground mt-1 text-pretty">Your PAN and date of birth decrypt AIS imports. Verification details populate the ITR-2 export. Stored locally — never sent anywhere.</p>
-    </div>
-
-    <div class="rounded-lg border bg-card p-4 space-y-3">
-      <form method="POST" action="/settings/tax-profile" class="space-y-3">
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="text-sm font-medium" for="tp-pan">PAN</label>
-            <input type="text" id="tp-pan" name="pan" value="{{.PAN}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="ABCDE1234F" maxlength="10">
-          </div>
-          <div>
-            <label class="text-sm font-medium" for="tp-dob">Date of Birth <span class="text-muted-foreground font-normal">(DDMMYYYY)</span></label>
-            <input type="text" id="tp-dob" name="dob" value="{{.DOB}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="15061990" maxlength="8">
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="text-sm font-medium" for="tp-name">Declarant Name</label>
-            <input type="text" id="tp-name" name="declarant_name" value="{{.DeclarantName}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="Full name as on PAN">
-          </div>
-          <div>
-            <label class="text-sm font-medium" for="tp-place">Verification Place</label>
-            <input type="text" id="tp-place" name="verification_place" value="{{.VerifyPlace}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="City">
-          </div>
-        </div>
-        <button type="submit" class="btn" data-size="sm">Save</button>
-      </form>
-    </div>
-  </section>
-
-  <!-- Bank Accounts -->
-  <section class="space-y-3">
-    <div>
-      <h2 class="text-xl font-semibold leading-tight text-balance">Bank Accounts</h2>
-      <p class="text-sm text-muted-foreground mt-1 text-pretty">For refund credit in the ITR-2 export. Mark one account as primary — that's where your refund goes.</p>
-    </div>
-
-    {{if .BankAccounts}}
-    <div class="space-y-2">
-      {{range .BankAccounts}}
-      <div class="flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
-        <div class="flex items-center gap-3">
-          {{if .IsPrimary}}
-          <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </p>
+        </section>
+        <aside>
+          {{if .Groww.Connected}}
+          <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('groww-disconnect-dialog').showModal()">Disconnect</button>
           {{else}}
-          <svg class="text-muted-foreground" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+          <a href="/groww/connect" class="btn" data-variant="outline" data-size="sm">{{if .Groww.Expired}}Reconnect{{else}}Connect{{end}}</a>
           {{end}}
-          <div>
-            <div class="font-medium">{{.BankName}} <span class="text-muted-foreground font-normal text-sm">({{.AccountType}})</span> {{if .IsPrimary}}<span class="badge ml-1" data-variant="outline">Primary</span>{{end}}</div>
-            <div class="text-sm text-muted-foreground">{{.IFSC}} &middot; {{.AccountNumber}}</div>
-          </div>
-        </div>
-        <div class="flex gap-2">
-          {{if not .IsPrimary}}
-          <form method="POST" action="/settings/bank-account/{{.ID}}/primary">
-            <button type="submit" class="btn" data-variant="ghost" data-size="sm">Set primary</button>
-          </form>
-          {{end}}
-          <form method="POST" action="/settings/bank-account/{{.ID}}/delete">
-            <button type="submit" class="btn" data-variant="ghost" data-size="sm text-destructive">Remove</button>
-          </form>
-        </div>
-      </div>
-      {{end}}
-    </div>
-    {{end}}
+        </aside>
+      </article>
 
-    <details class="rounded-lg border bg-card p-4">
-      <summary class="font-medium text-sm cursor-pointer">Add bank account</summary>
-      <form method="POST" action="/settings/bank-account" class="mt-3 space-y-3">
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="text-sm font-medium" for="ba-ifsc">IFSC Code</label>
-            <input type="text" id="ba-ifsc" name="ifsc" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="HDFC0000123">
-          </div>
-          <div>
-            <label class="text-sm font-medium" for="ba-acct">Account Number</label>
-            <input type="text" id="ba-acct" name="account_number" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="1234567890">
-          </div>
+      <!-- Kite -->
+      <article class="item" data-variant="outline" role="listitem">
+        <figure>
+          <span class="inline-block w-2.5 h-2.5 rounded-full {{if .Kite.Connected}}bg-success{{else if .Kite.Expired}}bg-warning{{else}}bg-muted-foreground/40{{end}}"></span>
+        </figure>
+        <section>
+          <h3>Kite <span class="text-muted-foreground font-normal text-sm">(Zerodha)</span></h3>
+          <p class="{{if .Kite.Connected}}text-success{{else if .Kite.Expired}}text-warning{{end}}">
+            {{if .Kite.Connected}}Connected{{else if .Kite.Expired}}Session expired{{else}}Not connected{{end}}
+          </p>
+        </section>
+        <aside>
+          {{if .Kite.Connected}}
+          <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('kite-disconnect-dialog').showModal()">Disconnect</button>
+          {{else}}
+          <a href="/kite/connect" class="btn" data-variant="outline" data-size="sm">{{if .Kite.Expired}}Reconnect{{else}}Connect{{end}}</a>
+          {{end}}
+        </aside>
+      </article>
+
+      <!-- greytHR -->
+      <article class="item" data-variant="outline" role="listitem">
+        <figure>
+          <span class="inline-block w-2.5 h-2.5 rounded-full {{if .GreytHR.Connected}}bg-success{{else}}bg-muted-foreground/40{{end}}"></span>
+        </figure>
+        <section>
+          <h3>greytHR {{if .GreytHR.Host}}<span class="text-muted-foreground font-normal text-sm">({{.GreytHR.Host}})</span>{{end}}</h3>
+          <p class="{{if .GreytHR.Connected}}text-success{{end}}">
+            {{if .GreytHR.Connected}}Connected{{else}}Not connected{{end}}
+          </p>
+        </section>
+        <aside>
+          <a href="/greythr" class="btn" data-variant="outline" data-size="sm">{{if .GreytHR.Connected}}Manage{{else}}Connect{{end}}</a>
+        </aside>
+      </article>
+    </div>
+  </div>
+
+  <!-- Tax: profile + bank accounts -->
+  <div role="tabpanel" id="settings-panel-tax" aria-labelledby="settings-tab-tax" tabindex="-1" class="p-6"{{if ne .ActiveTab "tax"}} hidden{{end}}>
+    <div class="space-y-6">
+      <!-- Tax Profile -->
+      <section class="space-y-4">
+        <div class="flex items-center gap-2">
+          <svg class="text-muted-foreground" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" viewBox="0 0 24 24" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+          <h3 class="text-base font-semibold">Tax Profile</h3>
         </div>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="text-sm font-medium" for="ba-bank">Bank Name</label>
-            <input type="text" id="ba-bank" name="bank_name" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="HDFC Bank">
-          </div>
-          <div>
-            <label class="text-sm font-medium" for="ba-type">Account Type</label>
-            <div class="select" data-placeholder="Savings">
-              <button type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="ba-type-listbox" class="w-full mt-1">
-                <span class="truncate">Savings</span>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-              </button>
-              <div data-popover aria-hidden="true">
-                <div role="listbox" id="ba-type-listbox">
-                  <div role="option" data-value="savings">Savings</div>
-                  <div role="option" data-value="current">Current</div>
+        <p class="text-sm text-muted-foreground text-pretty -mt-1">Your PAN and date of birth decrypt AIS imports. Verification details populate the ITR-2 export. Stored locally — never sent anywhere.</p>
+
+        <fieldset class="fieldset">
+          <form method="POST" action="/settings/tax-profile">
+            <div role="group" aria-label="Tax profile fields" class="space-y-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div role="group" class="field">
+                  <label for="tp-pan">PAN</label>
+                  <input id="tp-pan" name="pan" type="text" value="{{.PAN}}" placeholder="ABCDE1234F" maxlength="10">
+                </div>
+                <div role="group" class="field">
+                  <label for="tp-dob">Date of Birth</label>
+                  <input id="tp-dob" name="dob" type="date" value="{{.DOB}}" placeholder="1990-06-15">
                 </div>
               </div>
-              <input type="hidden" name="account_type" value="savings">
+              <div class="grid grid-cols-2 gap-4">
+                <div role="group" class="field">
+                  <label for="tp-name">Declarant Name</label>
+                  <input id="tp-name" name="declarant_name" type="text" value="{{.DeclarantName}}" placeholder="Full name as on PAN">
+                </div>
+                <div role="group" class="field">
+                  <label for="tp-place">Verification Place</label>
+                  <input id="tp-place" name="verification_place" type="text" value="{{.VerifyPlace}}" placeholder="City">
+                </div>
+              </div>
+              <div>
+                <button type="submit" class="btn" data-size="sm">Save</button>
+              </div>
             </div>
-          </div>
+          </form>
+        </fieldset>
+      </section>
+
+      <div class="field-separator"><hr role="separator" /></div>
+
+      <!-- Bank Accounts -->
+      <section class="space-y-4">
+        <div class="flex items-center gap-2">
+          <svg class="text-muted-foreground" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+          <h3 class="text-base font-semibold">Bank Accounts</h3>
         </div>
-        <label class="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="is_primary">
-          Set as primary account
-        </label>
-        <button type="submit" class="btn" data-size="sm">Add account</button>
-      </form>
-    </details>
-  </section>
+        <p class="text-sm text-muted-foreground text-pretty -mt-1">For refund credit in the ITR-2 export.{{if .BankAccounts}} Mark one account as primary — that's where your refund goes.{{end}}</p>
 
-  <!-- LLM Studio -->
-  <section class="space-y-3">
-    <div>
-      <h2 class="text-xl font-semibold leading-tight text-balance">LLM Studio</h2>
-      <p class="text-sm text-muted-foreground mt-1 text-pretty">Local LM Studio server used for payslip extraction. Change the endpoint with <code class="text-xs bg-muted px-1 py-0.5 rounded">cresto config set lm_studio_base_url &lt;url&gt;</code></p>
-    </div>
-
-    <div class="rounded-lg border bg-card p-4 space-y-3">
-      <div class="flex items-center justify-between gap-4">
-        <div class="flex items-center gap-3">
-          {{if eq .LLMHealth "loaded"}}
-          <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          {{else if or (eq .LLMHealth "server_down") (eq .LLMHealth "not_installed")}}
-          <svg class="text-destructive" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-          {{else}}
-          <svg class="text-warning" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          {{end}}
-          <div>
-            <div class="font-medium">
-              {{if eq .LLMHealth "loaded"}}Ready
-              {{else if eq .LLMHealth "server_down"}}Not reachable
-              {{else if eq .LLMHealth "not_loaded"}}Model not loaded
-              {{else if eq .LLMHealth "model_loading"}}Loading model…
-              {{else if eq .LLMHealth "server_starting"}}Starting server…
-              {{else if eq .LLMHealth "not_installed"}}Model not installed
-              {{else if eq .LLMHealth "unloading"}}Unloading…
-              {{else}}{{.LLMHealth}}
+        {{if .BankAccounts}}
+        <div class="item-group" role="list">
+          {{range .BankAccounts}}
+          <article class="item" data-variant="outline" role="listitem">
+            <figure>
+              {{if .IsPrimary}}
+              <svg class="text-success" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              {{else}}
+              <svg class="text-muted-foreground" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
               {{end}}
-            </div>
-            <div class="text-sm text-muted-foreground">{{.LLMURL}}</div>
-          </div>
+            </figure>
+            <section>
+              <h3>{{.BankName}} <span class="text-muted-foreground font-normal text-sm">({{.AccountType}})</span> {{if .IsPrimary}}<span class="badge ml-1" data-variant="outline">Primary</span>{{end}}</h3>
+              <p>{{.IFSC}} &middot; {{.AccountNumber}}</p>
+            </section>
+            <aside>
+              {{if not .IsPrimary}}
+              <form method="POST" action="/settings/bank-account/{{.ID}}/primary">
+                <button type="submit" class="btn" data-variant="ghost" data-size="sm">Set primary</button>
+              </form>
+              {{end}}
+              <form method="POST" action="/settings/bank-account/{{.ID}}/delete">
+                <button type="submit" class="btn" data-variant="ghost" data-size="sm text-destructive">Remove</button>
+              </form>
+            </aside>
+          </article>
+          {{end}}
         </div>
-      </div>
 
-      <!-- Configuration form -->
-      <form method="POST" action="/settings/llm" class="border-t pt-3 space-y-3">
-        <div>
-          <label class="text-sm font-medium" for="llm-url">Endpoint URL</label>
-          <input type="text" id="llm-url" name="base_url" value="{{.LLMURL}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="http://localhost:1234/v1">
+        <details class="rounded-lg border p-4">
+          <summary class="font-medium text-sm cursor-pointer">Add bank account</summary>
+          <fieldset class="fieldset mt-4">
+            <form method="POST" action="/settings/bank-account">
+              <div role="group" aria-label="Bank account fields" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                  <div role="group" class="field">
+                    <label for="ba-ifsc">IFSC Code</label>
+                    <input id="ba-ifsc" name="ifsc" type="text" placeholder="HDFC0000123" aria-describedby="ifsc-status">
+                    <p id="ifsc-status" class="hidden"></p>
+                  </div>
+                  <div role="group" class="field">
+                    <label for="ba-acct">Account Number</label>
+                    <input id="ba-acct" name="account_number" type="text" placeholder="1234567890">
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                  <div role="group" class="field">
+                    <label for="ba-bank">Bank Name</label>
+                    <input id="ba-bank" name="bank_name" type="text" placeholder="HDFC Bank">
+                  </div>
+                  <div role="group" class="field">
+                    <label for="ba-type">Account Type</label>
+                    <div class="select" data-placeholder="Savings">
+                      <button type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="ba-type-listbox" class="w-full">
+                        <span class="truncate">Savings</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                      </button>
+                      <div data-popover aria-hidden="true">
+                        <div role="listbox" id="ba-type-listbox">
+                          <div role="option" data-value="savings">Savings</div>
+                          <div role="option" data-value="current">Current</div>
+                        </div>
+                      </div>
+                      <input type="hidden" name="account_type" value="savings">
+                    </div>
+                  </div>
+                </div>
+                <div role="group" class="field" data-orientation="horizontal">
+                  <input id="ba-primary" type="checkbox" name="is_primary">
+                  <label for="ba-primary" class="font-normal">Set as primary account</label>
+                </div>
+                <div>
+                  <button type="submit" class="btn" data-size="sm">Add account</button>
+                </div>
+              </div>
+            </form>
+          </fieldset>
+        </details>
+        {{else}}
+        <!-- Empty state: the form IS the empty state — no <details> collapse -->
+        <fieldset class="fieldset">
+          <form method="POST" action="/settings/bank-account">
+            <div role="group" aria-label="Bank account fields" class="space-y-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div role="group" class="field">
+                  <label for="ba-ifsc">IFSC Code</label>
+                  <input id="ba-ifsc" name="ifsc" type="text" placeholder="HDFC0000123" aria-describedby="ifsc-status">
+                  <p id="ifsc-status" class="hidden"></p>
+                </div>
+                <div role="group" class="field">
+                  <label for="ba-acct">Account Number</label>
+                  <input id="ba-acct" name="account_number" type="text" placeholder="1234567890">
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div role="group" class="field">
+                  <label for="ba-bank">Bank Name</label>
+                  <input id="ba-bank" name="bank_name" type="text" placeholder="HDFC Bank">
+                </div>
+                <div role="group" class="field">
+                  <label for="ba-type">Account Type</label>
+                  <div class="select" data-placeholder="Savings">
+                    <button type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="ba-type-listbox" class="w-full">
+                      <span class="truncate">Savings</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div data-popover aria-hidden="true">
+                      <div role="listbox" id="ba-type-listbox">
+                        <div role="option" data-value="savings">Savings</div>
+                        <div role="option" data-value="current">Current</div>
+                      </div>
+                    </div>
+                    <input type="hidden" name="account_type" value="savings">
+                  </div>
+                </div>
+              </div>
+              <div role="group" class="field" data-orientation="horizontal">
+                <input id="ba-primary" type="checkbox" name="is_primary" checked>
+                <label for="ba-primary" class="font-normal">Set as primary account</label>
+              </div>
+              <div>
+                <button type="submit" class="btn" data-size="sm">Add account</button>
+              </div>
+            </div>
+          </form>
+        </fieldset>
+        {{end}}
+      </section>
+    </div>
+  </div>
+
+  <!-- Engine: LLM Studio -->
+  <div role="tabpanel" id="settings-panel-engine" aria-labelledby="settings-tab-engine" tabindex="-1" class="p-6"{{if ne .ActiveTab "engine"}} hidden{{end}}>
+    <div class="space-y-4">
+      <article class="item">
+        <figure>
+          {{if eq .LLMHealth "loaded"}}
+          <svg class="text-success" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          {{else if or (eq .LLMHealth "server_down") (eq .LLMHealth "not_installed")}}
+          <svg class="text-destructive" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          {{else}}
+          <svg class="text-warning" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          {{end}}
+        </figure>
+        <section>
+          <h3>
+            {{if eq .LLMHealth "loaded"}}Ready
+            {{else if eq .LLMHealth "server_down"}}Not reachable
+            {{else if eq .LLMHealth "not_loaded"}}Model not loaded
+            {{else if eq .LLMHealth "model_loading"}}Loading model…
+            {{else if eq .LLMHealth "server_starting"}}Starting server…
+            {{else if eq .LLMHealth "not_installed"}}Model not installed
+            {{else if eq .LLMHealth "unloading"}}Unloading…
+            {{else}}{{.LLMHealth}}
+            {{end}}
+          </h3>
+          <p>{{.LLMURL}}</p>
+        </section>
+      </article>
+
+      <form method="POST" action="/settings/llm" class="space-y-4">
+        <div role="group" class="field">
+          <label for="llm-url">Endpoint URL</label>
+          <input id="llm-url" name="base_url" type="text" value="{{.LLMURL}}" placeholder="http://localhost:1234/v1">
+        </div>
+        <div role="group" class="field">
+          <label for="llm-model">Model</label>
+          <input id="llm-model" name="model" type="text" value="{{.LLMModel}}" placeholder="mistralai/ministral-3-3b">
+        </div>
+        <div role="group" class="field">
+          <label for="llm-key">API Key <span class="text-muted-foreground font-normal">(optional — for remote instances)</span></label>
+          <input id="llm-key" name="api_key" type="password" value="{{.LLMAPIKey}}" placeholder="Leave empty for local LM Studio">
         </div>
         <div>
-          <label class="text-sm font-medium" for="llm-model">Model</label>
-          <input type="text" id="llm-model" name="model" value="{{.LLMModel}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="mistralai/ministral-3-3b">
+          <button type="submit" class="btn" data-size="sm">Save</button>
         </div>
-        <div>
-          <label class="text-sm font-medium" for="llm-key">API Key <span class="text-muted-foreground font-normal">(optional — for remote instances)</span></label>
-          <input type="password" id="llm-key" name="api_key" value="{{.LLMAPIKey}}" class="mt-1 w-full rounded-md border border-border bg-transparent px-3 py-1.5 text-base sm:text-sm" placeholder="Leave empty for local LM Studio">
-        </div>
-        <button type="submit" class="btn" data-size="sm">Save</button>
       </form>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- Disconnect confirmation dialogs -->
-  <dialog class="alert-dialog" id="groww-disconnect-dialog" aria-labelledby="groww-disconnect-title" aria-describedby="groww-disconnect-desc">
-    <div>
-      <header>
-        <h2 id="groww-disconnect-title">Disconnect from Groww?</h2>
-        <p id="groww-disconnect-desc">Cresto will forget your Groww access token. You can reconnect anytime.</p>
-      </header>
-      <footer>
-        <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
-        <a href="/groww/disconnect" class="btn" data-variant="destructive">Disconnect</a>
-      </footer>
-    </div>
-  </dialog>
+<!-- Disconnect confirmation dialogs (outside tabs — position-independent) -->
+<dialog class="alert-dialog" id="groww-disconnect-dialog" aria-labelledby="groww-disconnect-title" aria-describedby="groww-disconnect-desc">
+  <div>
+    <header>
+      <h2 id="groww-disconnect-title">Disconnect from Groww?</h2>
+      <p id="groww-disconnect-desc">Cresto will forget your Groww access token. You can reconnect anytime.</p>
+    </header>
+    <footer>
+      <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
+      <a href="/groww/disconnect" class="btn" data-variant="destructive">Disconnect</a>
+    </footer>
+  </div>
+</dialog>
 
-  <dialog class="alert-dialog" id="kite-disconnect-dialog" aria-labelledby="kite-disconnect-title" aria-describedby="kite-disconnect-desc">
-    <div>
-      <header>
-        <h2 id="kite-disconnect-title">Disconnect from Zerodha?</h2>
-        <p id="kite-disconnect-desc">Cresto will forget your Kite session. You can reconnect anytime.</p>
-      </header>
-      <footer>
-        <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
-        <a href="/kite/disconnect" class="btn" data-variant="destructive">Disconnect</a>
-      </footer>
-    </div>
-  </dialog>
-</div>
+<dialog class="alert-dialog" id="kite-disconnect-dialog" aria-labelledby="kite-disconnect-title" aria-describedby="kite-disconnect-desc">
+  <div>
+    <header>
+      <h2 id="kite-disconnect-title">Disconnect from Zerodha?</h2>
+      <p id="kite-disconnect-desc">Cresto will forget your Kite session. You can reconnect anytime.</p>
+    </header>
+    <footer>
+      <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
+      <a href="/kite/disconnect" class="btn" data-variant="destructive">Disconnect</a>
+    </footer>
+  </div>
+</dialog>
+
+<script>
+  (() => {
+    const tabsRoot = document.getElementById('settings-tabs');
+    if (!tabsRoot) return;
+    // Update URL query param when user switches tabs (cosmetic — server sets initial tab via ?tab=).
+    tabsRoot.querySelectorAll('[role="tab"]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const name = tab.id.replace('settings-tab-', '');
+        history.replaceState(null, '', '?tab=' + name);
+      });
+    });
+  })();
+
+  // IFSC verification: autofill bank name on blur via Razorpay IFSC API.
+  (() => {
+    const ifscInput = document.getElementById('ba-ifsc');
+    const statusEl = document.getElementById('ifsc-status');
+    const bankInput = document.getElementById('ba-bank');
+    if (!ifscInput || !bankInput) return;
+    const field = ifscInput.closest('.field');
+
+    const setState = (text, state) => {
+      statusEl.textContent = text;
+      statusEl.className = state === 'idle' ? 'hidden' : '';
+      if (state === 'error') {
+        statusEl.setAttribute('role', 'alert');
+      } else {
+        statusEl.removeAttribute('role');
+      }
+      ifscInput.toggleAttribute('aria-invalid', state === 'error');
+      if (field) field.toggleAttribute('data-invalid', state === 'error');
+    };
+
+    ifscInput.addEventListener('blur', async () => {
+      const code = ifscInput.value.trim().toUpperCase();
+      if (!code || code.length < 4) {
+        setState('', 'idle');
+        return;
+      }
+
+      const cacheKey = 'ifsc:' + code;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) { applyResult(JSON.parse(cached)); return; }
+
+      setState('Looking up…', 'info');
+
+      try {
+        const res = await fetch('https://ifsc.razorpay.com/' + code);
+        if (res.ok) {
+          const data = await res.json();
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+          applyResult(data);
+        } else if (res.status === 404) {
+          setState('Invalid IFSC code', 'error');
+          bankInput.value = '';
+        } else {
+          setState('', 'idle');
+        }
+      } catch (_) {
+        setState('', 'idle');
+      }
+    });
+
+    function applyResult(data) {
+      if (data.BANK) {
+        bankInput.value = data.BANK;
+        setState('\u2713 ' + data.BANK + (data.BRANCH ? ' \u00b7 ' + data.BRANCH : ''), 'success');
+      }
+    }
+  })();
+</script>
 {{end}}

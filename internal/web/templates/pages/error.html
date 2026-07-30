@@ -8,7 +8,8 @@
     <p>{{.Message}}</p>
   </header>
   <footer>
-    <a href="/" class="btn">Back to dashboard</a>
+    {{range .Links}}<a href="{{.Href}}" class="btn">{{.Label}}</a> {{end}}
+    <a href="/" class="btn" data-variant="outline">Dashboard</a>
   </footer>
 </section>
 {{end}}

@@ -44,8 +44,10 @@ var tmplFuncs = template.FuncMap{
 	"json":             toJSONJS,
 	"abs":              abs,
 	"neg":              neg,
+	"positive":         positive,
 	"sign":             sign,
 	"mul":              mulFloat,
+	"add":              addFloat,
 	"inc":              incInt,
 	"dec":              decInt,
 	"sparklineSVG":     sparklineSVG,
@@ -63,6 +65,8 @@ func decInt(n int) int { return n - 1 }
 // per-row value (LTP × qty) and invested (avgPrice × qty) for the data
 // attributes that drive client-side totals recomputation on filter.
 func mulFloat(a, b float64) float64 { return a * b }
+
+func addFloat(a, b float64) float64 { return a + b }
 
 // reversePoints returns a copy of the slice in reverse order. Used by the
 // component detail page: the chart wants chronological (oldest first),
@@ -134,8 +138,8 @@ func sparklineSVG(points []float64, accentLatest bool) template.HTML {
 		return template.HTML("")
 	}
 	const (
-		w = 72
-		h = 20
+		w   = 72
+		h   = 20
 		pad = 2
 	)
 	min, max := points[0], points[0]
@@ -159,7 +163,7 @@ func sparklineSVG(points []float64, accentLatest bool) template.HTML {
 		return pad + float64(i)*(float64(w)-2*pad)/float64(len(points)-1)
 	}
 	yFor := func(v float64) float64 {
-		return pad + (1 - (v-min)/span) * float64(h-2*pad)
+		return pad + (1-(v-min)/span)*float64(h-2*pad)
 	}
 
 	var b strings.Builder
@@ -334,6 +338,12 @@ func abs(v float64) float64 {
 // P&L colour/sign logic without precomputing bools on every holding.
 func neg(v float64) bool { return v < 0 }
 
+// positive returns true for values > 0. Used by templates that need a
+// non-zero guard on non-negative amounts (rebate, surcharge, cess) where
+// `neg` is wrong (those values are never negative) and Go templates can't
+// compare float64 with int literals.
+func positive(v float64) bool { return v > 0 }
+
 // sign returns "+" for non-negative values and "" for negative ones. Used
 // by the Groww holdings table to prefix positive P&L amounts — the same
 // float64-vs-int limitation that neg addresses applies to the ge builtin.
@@ -355,9 +365,9 @@ type Breadcrumb struct {
 // Embed it in page-specific data structs so the nav can show the pending badge
 // and mark the active nav item via aria-current.
 type pageData struct {
-	Title          string
-	PendingCount   int
-	ActiveBatchID  string
+	Title         string
+	PendingCount  int
+	ActiveBatchID string
 	// Active marks the current nav item: "dashboard", "annual", "payslips",
 	// "review", or "" (none — e.g. upload pages are actions, not places).
 	Active string
@@ -422,10 +432,11 @@ func formatMoney(v float64) template.HTML {
 // Used by internal callers that build SVG/strings (sparklines, slopegraphs)
 // where the span would break the output.
 func formatMoneyPlain(v float64) string {
-	if v == float64(int64(v)) {
-		return humanize.Comma(int64(v))
+	r := math.Round(v*100) / 100
+	if r == float64(int64(r)) {
+		return humanize.Comma(int64(r))
 	}
-	return humanize.Commaf(v)
+	return humanize.Commaf(r)
 }
 
 // formatMoney2 formats a float with comma grouping and exactly 2 decimal
@@ -476,7 +487,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("POST /payslip/{id}", s.handleReviewSubmit)
 	mux.HandleFunc("GET /payslip/{id}/skip", s.handleReviewSkip)
 	mux.HandleFunc("POST /payslip/{id}/retry", s.handleRetry)
- 	mux.HandleFunc("POST /payslip/{id}/delete", s.handleDeletePayslip)
+	mux.HandleFunc("POST /payslip/{id}/delete", s.handleDeletePayslip)
 	mux.HandleFunc("POST /payslips/bulk-delete", s.handleBulkDelete)
 	mux.HandleFunc("POST /payslips/bulk-confirm", s.handleBulkConfirm)
 	mux.HandleFunc("GET /component/{id}", s.handleComponentDetail)
@@ -522,6 +533,8 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /tax", s.handleTax)
 	mux.HandleFunc("POST /tax/ais-upload", s.handleTaxAISUpload)
 	mux.HandleFunc("POST /tax/kite-upload", s.handleTaxKiteUpload)
+	mux.HandleFunc("POST /tax/clear-ais", s.handleTaxClearAIS)
+	mux.HandleFunc("POST /tax/clear-kite", s.handleTaxClearKite)
 	mux.HandleFunc("GET /tax/export", s.handleTaxExport)
 
 	// Static assets: CSS, JS. fs.Sub scopes the embed to /static.
@@ -544,16 +557,26 @@ func (s *Server) render(w http.ResponseWriter, page string, data any) {
 	}
 }
 
-func (s *Server) renderError(w http.ResponseWriter, status int, msg string) {
+func (s *Server) renderError(w http.ResponseWriter, status int, msg string, recoveryLinks ...string) {
 	w.WriteHeader(status)
+	type link struct {
+		Href  string
+		Label string
+	}
+	var links []link
+	for i := 0; i+1 < len(recoveryLinks); i += 2 {
+		links = append(links, link{Href: recoveryLinks[i], Label: recoveryLinks[i+1]})
+	}
 	s.render(w, "error", struct {
 		pageData
 		Status  int
 		Message string
+		Links   []link
 	}{
 		pageData: pageData{Title: "Error", ActiveBatchID: ""},
 		Status:   status,
 		Message:  msg,
+		Links:    links,
 	})
 }
 
@@ -799,10 +822,10 @@ func (s *Server) handleComponentDetail(w http.ResponseWriter, r *http.Request) {
 // (LLM status pill, greytHR state) stay populated in both paths.
 type uploadPageData struct {
 	pageData
-	Error           string
-	LLMStatus       string
-	LLMBaseURL      string
-	LLMModelName    string
+	Error            string
+	LLMStatus        string
+	LLMBaseURL       string
+	LLMModelName     string
 	GreytHRConnected bool
 }
 
@@ -882,14 +905,14 @@ func (s *Server) handleBatchProgress(w http.ResponseWriter, r *http.Request) {
 
 // batchStatusJSON is the JSON payload returned by the batch status API.
 type batchStatusJSON struct {
-	Done         bool              `json:"done"`
-	Total        int               `json:"total"`
-	Processed    int               `json:"processed"`
-	Failed       int               `json:"failed"`
-	Pct          int               `json:"pct"`
-	CurrentFile  string            `json:"current_file"`
-	CurrentStage string            `json:"current_stage"`
-	Payslips     []payslipSummary  `json:"payslips"`
+	Done         bool             `json:"done"`
+	Total        int              `json:"total"`
+	Processed    int              `json:"processed"`
+	Failed       int              `json:"failed"`
+	Pct          int              `json:"pct"`
+	CurrentFile  string           `json:"current_file"`
+	CurrentStage string           `json:"current_stage"`
+	Payslips     []payslipSummary `json:"payslips"`
 }
 
 type payslipSummary struct {

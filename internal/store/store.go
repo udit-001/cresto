@@ -1862,3 +1862,18 @@ func (s *Store) HasCapitalGains(ctx context.Context, fyStartYear int) (bool, err
 	}
 	return count > 0, nil
 }
+
+// DeleteAISImport removes the AIS import for the given FY. Does not delete
+// the raw JSON file on disk (the caller handles that if needed).
+func (s *Store) DeleteAISImport(ctx context.Context, fyStartYear int) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM ais_imports WHERE fy_start_year = ?`, fyStartYear)
+	return err
+}
+
+// DeleteCapitalGainsTrades removes all CG trades for the given FY.
+func (s *Store) DeleteCapitalGainsTrades(ctx context.Context, fyStartYear int) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM capital_gains_trades WHERE fy_start_year = ?`, fyStartYear)
+	return err
+}

@@ -36,54 +36,92 @@
         <div class="flex-1">
           <p class="font-medium">Upload the AIS JSON file</p>
           <p class="text-sm text-muted-foreground mt-1">Cresto will decrypt it automatically using your PAN and date of birth.</p>
-          <form method="POST" action="/tax/ais-upload" enctype="multipart/form-data" class="mt-3">
+          {{if .PAN}}
+          <p class="text-xs text-muted-foreground mt-2 font-mono">Decrypting with PAN {{.PAN}}{{if .DOBYear}} · DOB ••/••/{{.DOBYear}}{{end}} · <a href="/settings?tab=tax" class="underline not-italic font-sans">edit</a></p>
+          {{end}}
+          <form method="POST" action="/tax/ais-upload" enctype="multipart/form-data" class="mt-3" data-upload>
             <div class="flex items-center gap-3">
               <input class="input" type="file" name="ais" accept=".json,application/json" required>
-              <button type="submit" class="btn" data-size="sm">Upload &amp; Decrypt</button>
+              <button type="submit" class="btn" data-size="sm" disabled>Upload &amp; Decrypt</button>
             </div>
           </form>
+          <div data-upload-status class="text-sm mt-2"></div>
         </div>
       </div>
 
-      <div class="flex items-start gap-3 opacity-50">
-        <span class="flex-none inline-flex items-center justify-center w-6 h-6 rounded-full bg-muted text-muted-foreground text-xs font-semibold mt-0.5">3</span>
-        <div>
-          <p class="font-medium">Capital gains (optional)</p>
-          <p class="text-sm text-muted-foreground mt-1">After AIS import, upload your Kite Console Tax P&L for capital gains data.</p>
+      <div class="flex items-start gap-3 {{if not .HasAIS}}opacity-50{{end}}">
+        <span class="flex-none inline-flex items-center justify-center w-6 h-6 rounded-full {{if .HasAIS}}bg-primary text-primary-foreground{{else}}bg-muted text-muted-foreground{{end}} text-xs font-semibold mt-0.5">3</span>
+        <div class="flex-1">
+          <p class="font-medium">Capital gains {{if .HasAIS}}<span class="text-muted-foreground font-normal text-sm">(optional)</span>{{else}}<span class="text-muted-foreground font-normal text-sm">(after AIS)</span>{{end}}</p>
+          <p class="text-sm text-muted-foreground mt-1">If you have equity/MF sales, upload your Kite Console Tax P&L for capital gains data.</p>
+          {{if .HasAIS}}
+          <div class="mt-2 text-sm text-muted-foreground space-y-1">
+            <p><a href="https://console.zerodha.com/reports/taxpnl" class="underline" target="_blank" rel="noopener">Zerodha Console ↗</a> → <span class="font-medium text-foreground">Tax P&L</span></p>
+            <p>Select FY → Download as <span class="font-medium text-foreground">XLSX (spreadsheet)</span></p>
+          </div>
+          <form method="POST" action="/tax/kite-upload" enctype="multipart/form-data" class="mt-3" data-upload>
+              <div class="flex items-center gap-3">
+                <input class="input" type="file" name="kite" accept=".xlsx" required>
+                <button type="submit" class="btn" data-size="sm" disabled>Upload</button>
+              </div>
+            </form>
+            <div data-upload-status class="text-sm mt-2"></div>
+          {{end}}
         </div>
       </div>
     </div>
   </section>
 
   {{else}}
-  <!-- Populated state: AIS data display -->
+  <!-- Populated state -->
 
   <!-- FY Header -->
   <div class="card">
     <header>
       <h2 class="text-xl font-semibold tracking-tight">FY {{.FY}}</h2>
       <p class="text-muted-foreground text-sm">AIS imported · ITR-2 · New tax regime{{if .HasKite}} · Kite Console imported{{end}}</p>
+      {{if .PAN}}<p class="text-muted-foreground text-xs mt-1 font-mono">{{.PAN}}{{if .DeclarantName}} · {{.DeclarantName}}{{end}}</p>{{end}}
     </header>
     <section class="mt-4 flex flex-wrap items-center gap-3">
-      <form method="POST" action="/tax/ais-upload" enctype="multipart/form-data" class="flex items-center gap-2">
+      <form method="POST" action="/tax/ais-upload" enctype="multipart/form-data" class="flex items-center gap-2" data-upload>
         <input class="input" type="file" name="ais" accept=".json,application/json" required>
-        <button type="submit" class="btn" data-variant="outline" data-size="sm">Re-import AIS</button>
+        <button type="submit" class="btn" data-variant="outline" data-size="sm" disabled>Re-import AIS</button>
       </form>
+      {{if .PAN}}<p class="text-xs text-muted-foreground font-mono">Decrypting with PAN {{.PAN}}{{if .DOBYear}} · DOB ••/••/{{.DOBYear}}{{end}} · <a href="/settings?tab=tax" class="underline not-italic font-sans">edit</a></p>{{end}}
       {{if not .HasKite}}
-      <form method="POST" action="/tax/kite-upload" enctype="multipart/form-data" class="flex items-center gap-2">
-        <input class="input" type="file" name="kite" accept=".xlsx" required>
-        <button type="submit" class="btn" data-size="sm">Import Kite Console</button>
-      </form>
+      <section class="accordion w-full rounded-lg border bg-card text-card-foreground">
+        <details>
+          <summary class="text-sm px-4 py-2.5">
+            Import capital gains from Kite Console
+            <svg class="lucide lucide-chevron-down" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <section class="space-y-3 p-4 border-t">
+            <div class="text-sm text-muted-foreground space-y-1">
+              <p>On <a href="https://console.zerodha.com/reports/taxpnl" class="underline" target="_blank" rel="noopener">Zerodha Console ↗</a>, go to <span class="font-medium text-foreground">Tax P&amp;L</span></p>
+              <p>Select FY {{.FY}}, download as <span class="font-medium text-foreground">XLSX</span></p>
+            </div>
+            <form method="POST" action="/tax/kite-upload" enctype="multipart/form-data" class="flex items-center gap-3" data-upload>
+              <input class="input" type="file" name="kite" accept=".xlsx" required>
+              <button type="submit" class="btn" data-size="sm" disabled>Upload</button>
+            </form>
+            <div data-upload-status class="text-sm"></div>
+          </section>
+        </details>
+      </section>
       {{else}}
-      <form method="POST" action="/tax/kite-upload" enctype="multipart/form-data" class="flex items-center gap-2">
+      <form method="POST" action="/tax/kite-upload" enctype="multipart/form-data" class="flex items-center gap-2" data-upload>
         <input class="input" type="file" name="kite" accept=".xlsx" required>
-        <button type="submit" class="btn" data-variant="outline" data-size="sm">Re-import Kite</button>
+        <button type="submit" class="btn" data-variant="outline" data-size="sm" disabled>Re-import Kite</button>
       </form>
       {{end}}
     </section>
+    <footer class="mt-4 pt-3 border-t flex items-center gap-4 text-sm">
+      {{if .HasKite}}
+      <button type="button" class="text-muted-foreground hover:text-destructive" onclick="document.getElementById('clear-kite-dialog').showModal()">Clear capital gains</button>
+      {{end}}
+      <button type="button" class="text-muted-foreground hover:text-destructive" onclick="document.getElementById('clear-ais-dialog').showModal()">Clear all tax data</button>
+    </footer>
   </div>
-
-  <!-- Salary per employer -->
   {{if .Salaries}}
   <div class="card">
     <header>
@@ -193,167 +231,7 @@
   </div>
   {{end}}
 
-  <!-- Tax Liability Breakdown -->
-  <div class="card">
-    <header>
-      <h3 class="font-semibold">Tax Liability</h3>
-      <p class="text-muted-foreground text-sm">New regime slabs · Section 115BAC</p>
-    </header>
-    <section class="mt-4">
-      <table class="table w-full">
-        <tbody class="text-sm">
-          <tr>
-            <td class="py-2">Gross Salary ({{len .Salaries}} employer{{if gt (len .Salaries) 1}}s{{end}})</td>
-            <td class="text-right py-2 tabular-nums">{{money .TotalSalary}}</td>
-          </tr>
-          {{range .Salaries}}
-          <tr class="text-muted-foreground">
-            <td class="py-2 pl-4">— {{.Employer}}</td>
-            <td class="text-right py-2 tabular-nums">{{money .GrossSalary}}</td>
-          </tr>
-          {{end}}
-          <tr>
-            <td class="py-2">Standard Deduction (16ia)</td>
-            <td class="text-right py-2 tabular-nums text-muted-foreground">−{{money .TaxBreakdown.StandardDeduction}}</td>
-          </tr>
-          <tr class="border-t font-medium">
-            <td class="py-2">Taxable Salary</td>
-            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.TaxableSalary}}</td>
-          </tr>
-          <tr>
-            <td class="py-2">Savings Interest ({{len .SavingsInterest}} bank{{if gt (len .SavingsInterest) 1}}s{{end}})</td>
-            <td class="text-right py-2 tabular-nums">{{money .TotalSavings}}</td>
-          </tr>
-          <tr>
-            <td class="py-2">FD Interest ({{len .FDInterest}} bank{{if gt (len .FDInterest) 1}}s{{end}})</td>
-            <td class="text-right py-2 tabular-nums">{{money .TotalFD}}</td>
-          </tr>
-          <tr>
-            <td class="py-2">Dividends</td>
-            <td class="text-right py-2 tabular-nums">{{money .TotalDividends}}</td>
-          </tr>
-          <tr class="border-t font-semibold">
-            <td class="py-2">Total Taxable Income</td>
-            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.TotalTaxableIncome}}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-  </div>
-
-  <!-- Tax Computation -->
-  <div class="card">
-    <header>
-      <h3 class="font-semibold">Tax Computation</h3>
-    </header>
-    <section class="mt-4">
-      <table class="table w-full">
-        <tbody class="text-sm">
-          <tr>
-            <td class="py-2">Tax at normal rates (slabs)</td>
-            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.NormalRateTax}}</td>
-          </tr>
-          <tr>
-            <td class="py-2">Tax at special rates (STCG @ 20% + LTCG @ 12.5%)</td>
-            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.SpecialRateTax}}</td>
-          </tr>
-          {{if neg .TaxBreakdown.Rebate87A}}
-          <tr>
-            <td class="py-2">Rebate u/s 87A</td>
-            <td class="text-right py-2 tabular-nums text-muted-foreground">−{{money .TaxBreakdown.Rebate87A}}</td>
-          </tr>
-          {{end}}
-          {{if neg .TaxBreakdown.MarginalRelief}}
-          <tr>
-            <td class="py-2">Marginal Relief</td>
-            <td class="text-right py-2 tabular-nums text-muted-foreground">−{{money .TaxBreakdown.MarginalRelief}}</td>
-          </tr>
-          {{end}}
-          {{if neg .TaxBreakdown.Surcharge}}
-          <tr>
-            <td class="py-2">Surcharge ({{printf "%.0f" (mul .TaxBreakdown.SurchargeRate 100)}}%)</td>
-            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.Surcharge}}</td>
-          </tr>
-          {{end}}
-          <tr>
-            <td class="py-2">Health &amp; Education Cess (4%)</td>
-            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.Cess}}</td>
-          </tr>
-          <tr class="border-t font-semibold text-base">
-            <td class="py-3">Total Tax Liability</td>
-            <td class="text-right py-3 tabular-nums">{{money .TaxBreakdown.TotalTaxLiability}}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-  </div>
-
-  <!-- Refund / Dues -->
-  <div class="card">
-    <section class="flex items-center justify-between p-6">
-      <div>
-        <p class="text-sm text-muted-foreground">Tax Liability</p>
-        <p class="text-2xl font-semibold tabular-nums">{{money .TaxBreakdown.TotalTaxLiability}}</p>
-      </div>
-      <div class="text-center">
-        <p class="text-sm text-muted-foreground">TDS Paid</p>
-        <p class="text-2xl font-semibold tabular-nums">{{money .TotalAISTDS}}</p>
-      </div>
-      <div class="text-right">
-        {{if .HasRefund}}
-        <p class="text-sm text-muted-foreground">Refund</p>
-        <p class="text-2xl font-bold tabular-nums text-success">{{sign .RefundDue}}{{money .RefundDue}}</p>
-        {{else}}
-        <p class="text-sm text-muted-foreground">Balance Due</p>
-        <p class="text-2xl font-bold tabular-nums text-destructive">{{sign .RefundDue}}{{money .RefundDue}}</p>
-        {{end}}
-      </div>
-    </section>
-  </div>
-
-  <!-- TDS Reconciliation -->
-  {{if .TDSRecon}}
-  <div class="card">
-    <header>
-      <h3 class="font-semibold">TDS Reconciliation</h3>
-      <p class="text-muted-foreground text-sm">AIS vs Cresto payslip data</p>
-    </header>
-    <section class="mt-4">
-      <table class="table w-full">
-        <thead>
-          <tr class="text-xs text-muted-foreground">
-            <th class="text-left py-2">Deductor</th>
-            <th class="text-left py-2">Section</th>
-            <th class="text-right py-2">AIS Income</th>
-            <th class="text-right py-2">AIS TDS</th>
-            <th class="text-right py-2">Cresto TDS</th>
-            <th class="text-center py-2">Status</th>
-          </tr>
-        </thead>
-        <tbody class="text-sm">
-          {{range .TDSRecon}}
-          <tr>
-            <td class="py-2">{{.Deductor}}</td>
-            <td class="py-2 text-muted-foreground">{{.Section}}</td>
-            <td class="text-right py-2 tabular-nums">{{money .AISIncome}}</td>
-            <td class="text-right py-2 tabular-nums">{{money .AISTDS}}</td>
-            <td class="text-right py-2 tabular-nums">
-              {{if .HasPayslips}}{{money .CrestoTDS}}{{else}}<span class="text-muted-foreground">—</span>{{end}}
-            </td>
-            <td class="text-center py-2 text-xs">
-              {{if eq .Status "match"}}<span class="text-success">✓ Match</span>
-              {{else if eq .Status "gap"}}<span class="text-destructive">⚠ Gap {{sign .GapAmount}}{{money .GapAmount}}</span>
-              {{else}}<span class="text-muted-foreground">No payslips</span>{{end}}
-            </td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </section>
-  </div>
-  {{end}}
-
-  <!-- Securities sales (AIS SFT-17-LES(M)) -->
+  <!-- Securities sales (AIS) -->
   {{if .Securities}}
   <div class="card">
     <header>
@@ -377,42 +255,6 @@
             <td class="text-right py-2 tabular-nums">{{money .SalesConsideration}}</td>
             <td class="text-right py-2 tabular-nums">{{money .CostOfAcquisition}}</td>
             <td class="text-center py-2 text-xs">{{.Type}}</td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </section>
-  </div>
-  {{end}}
-
-  <!-- Advance tax (AIS paymentOfTaxes) -->
-  {{if .AdvanceTax}}
-  <div class="card">
-    <header>
-      <h3 class="font-semibold">Tax Payments</h3>
-      <p class="text-muted-foreground text-sm">Advance tax / self-assessment tax</p>
-    </header>
-    <section class="mt-4">
-      <table class="table w-full">
-        <thead>
-          <tr class="text-xs text-muted-foreground">
-            <th class="text-left py-2">FY</th>
-            <th class="text-left py-2">Head</th>
-            <th class="text-right py-2">Tax</th>
-            <th class="text-right py-2">Total</th>
-            <th class="text-left py-2">Date</th>
-            <th class="text-left py-2">BSR / Challan</th>
-          </tr>
-        </thead>
-        <tbody class="text-sm">
-          {{range .AdvanceTax}}
-          <tr>
-            <td class="py-2 text-muted-foreground">{{.FY}}</td>
-            <td class="py-2 text-xs">{{.MinorHead}}</td>
-            <td class="text-right py-2 tabular-nums">{{money .Tax}}</td>
-            <td class="text-right py-2 tabular-nums">{{money .Total}}</td>
-            <td class="py-2 text-muted-foreground">{{.Date}}</td>
-            <td class="py-2 text-xs font-mono text-muted-foreground">{{.BSRCode}} / {{.Challan}}</td>
           </tr>
           {{end}}
         </tbody>
@@ -473,6 +315,221 @@
   </div>
   {{end}}
 
+  <!-- Tax Payments (AIS) -->
+  {{if .AdvanceTax}}
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">Tax Payments</h3>
+      <p class="text-muted-foreground text-sm">Advance tax / self-assessment tax</p>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <thead>
+          <tr class="text-xs text-muted-foreground">
+            <th class="text-left py-2">FY</th>
+            <th class="text-left py-2">Head</th>
+            <th class="text-right py-2">Tax</th>
+            <th class="text-right py-2">Total</th>
+            <th class="text-left py-2">Date</th>
+            <th class="text-left py-2">BSR / Challan</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm">
+          {{range .AdvanceTax}}
+          <tr>
+            <td class="py-2 text-muted-foreground">{{.FY}}</td>
+            <td class="py-2 text-xs">{{.MinorHead}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .Tax}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .Total}}</td>
+            <td class="py-2 text-muted-foreground">{{.Date}}</td>
+            <td class="py-2 text-xs font-mono text-muted-foreground">{{.BSRCode}} / {{.Challan}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+  </div>
+  {{end}}
+
+  <!-- Tax Liability Breakdown -->
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">Tax Liability</h3>
+      <p class="text-muted-foreground text-sm">New regime slabs · Section 115BAC</p>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <tbody class="text-sm">
+          <tr>
+            <td class="py-2">Gross Salary ({{len .Salaries}} employer{{if gt (len .Salaries) 1}}s{{end}})</td>
+            <td class="text-right py-2 tabular-nums">{{money .TotalSalary}}</td>
+          </tr>
+          {{range .Salaries}}
+          <tr class="text-muted-foreground">
+            <td class="py-2 pl-4">— {{.Employer}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .GrossSalary}}</td>
+          </tr>
+          {{end}}
+          <tr>
+            <td class="py-2">Standard Deduction (16ia)</td>
+            <td class="text-right py-2 tabular-nums text-muted-foreground">−{{money .TaxBreakdown.StandardDeduction}}</td>
+          </tr>
+          <tr class="border-t font-medium">
+            <td class="py-2">Taxable Salary</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.TaxableSalary}}</td>
+          </tr>
+          <tr>
+            <td class="py-2">Savings Interest ({{len .SavingsInterest}} bank{{if gt (len .SavingsInterest) 1}}s{{end}})</td>
+            <td class="text-right py-2 tabular-nums">{{money .TotalSavings}}</td>
+          </tr>
+          <tr>
+            <td class="py-2">FD Interest ({{len .FDInterest}} bank{{if gt (len .FDInterest) 1}}s{{end}})</td>
+            <td class="text-right py-2 tabular-nums">{{money .TotalFD}}</td>
+          </tr>
+          <tr>
+            <td class="py-2">Dividends</td>
+            <td class="text-right py-2 tabular-nums">{{money .TotalDividends}}</td>
+          </tr>
+          {{if .CGTrades}}
+          <tr>
+            <td class="py-2">STCG Equity @ 20% (special rate)</td>
+            <td class="text-right py-2 tabular-nums">{{money .TotalSTCG}}</td>
+          </tr>
+          <tr>
+            <td class="py-2">LTCG Equity @ 12.5% (after ₹1.25L exemption)</td>
+            <td class="text-right py-2 tabular-nums">{{money .TotalLTCG}}</td>
+          </tr>
+          {{end}}
+          <tr class="border-t font-semibold">
+            <td class="py-2">Total Taxable Income</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.TotalTaxableIncome}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- Tax Computation -->
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">Tax Computation</h3>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <tbody class="text-sm">
+          <tr>
+            <td class="py-2">Tax at normal rates (slabs)</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.NormalRateTax}}</td>
+          </tr>
+          <tr>
+            <td class="py-2">Tax at special rates (STCG @ 20% + LTCG @ 12.5%)</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.SpecialRateTax}}</td>
+          </tr>
+          {{if positive .TaxBreakdown.Rebate87A}}
+          <tr>
+            <td class="py-2">Rebate u/s 87A</td>
+            <td class="text-right py-2 tabular-nums text-muted-foreground">−{{money .TaxBreakdown.Rebate87A}}</td>
+          </tr>
+          {{end}}
+          {{if positive .TaxBreakdown.MarginalRelief}}
+          <tr>
+            <td class="py-2">Marginal Relief</td>
+            <td class="text-right py-2 tabular-nums text-muted-foreground">−{{money .TaxBreakdown.MarginalRelief}}</td>
+          </tr>
+          {{end}}
+          {{if positive .TaxBreakdown.Surcharge}}
+          <tr>
+            <td class="py-2">Surcharge ({{printf "%.0f" (mul .TaxBreakdown.SurchargeRate 100)}}%)</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.Surcharge}}</td>
+          </tr>
+          {{end}}
+          <tr>
+            <td class="py-2">Health &amp; Education Cess (4%)</td>
+            <td class="text-right py-2 tabular-nums">{{money .TaxBreakdown.Cess}}</td>
+          </tr>
+          <tr class="border-t font-semibold text-base">
+            <td class="py-3">Total Tax Liability</td>
+            <td class="text-right py-3 tabular-nums">{{money .TaxBreakdown.TotalTaxLiability}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- TDS Reconciliation -->
+  {{if .TDSRecon}}
+  <div class="card">
+    <header>
+      <h3 class="font-semibold">TDS Reconciliation</h3>
+      <p class="text-muted-foreground text-sm">AIS vs Cresto payslip data</p>
+    </header>
+    <section class="mt-4">
+      <table class="table w-full">
+        <thead>
+          <tr class="text-xs text-muted-foreground">
+            <th class="text-left py-2">Deductor</th>
+            <th class="text-left py-2">Section</th>
+            <th class="text-right py-2">AIS Income</th>
+            <th class="text-right py-2">AIS TDS</th>
+            <th class="text-right py-2">Cresto TDS</th>
+            <th class="text-center py-2">Status</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm">
+          {{range .TDSRecon}}
+          <tr>
+            <td class="py-2">{{.Deductor}}</td>
+            <td class="py-2 text-muted-foreground">{{.Section}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .AISIncome}}</td>
+            <td class="text-right py-2 tabular-nums">{{money .AISTDS}}</td>
+            <td class="text-right py-2 tabular-nums">
+              {{if .HasPayslips}}{{money .CrestoTDS}}{{else}}<span class="text-muted-foreground">—</span>{{end}}
+            </td>
+            <td class="text-center py-2 text-xs">
+              {{if eq .Status "match"}}<span class="text-success">✓ Match</span>
+              {{else if eq .Status "gap"}}<span class="text-destructive">⚠ Gap {{sign .GapAmount}}{{money .GapAmount}}</span>
+              {{else}}<span class="text-muted-foreground">No payslips</span>{{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+  </div>
+  {{end}}
+
+  <!-- Refund / Dues -->
+  <div class="card">
+    <section class="flex items-center justify-between p-6">
+      <div>
+        <p class="text-sm text-muted-foreground">Tax Liability</p>
+        <p class="text-2xl font-semibold tabular-nums">{{money .TaxBreakdown.TotalTaxLiability}}</p>
+      </div>
+      <div class="text-center">
+        <p class="text-sm text-muted-foreground">TDS + Advance Tax Paid</p>
+        <p class="text-2xl font-semibold tabular-nums">{{money (add .TotalAISTDS .TotalAdvanceTax)}}</p>
+      </div>
+      <div class="text-right">
+        {{if .HasRefund}}
+        <p class="text-sm text-muted-foreground">Refund</p>
+        <p class="text-2xl font-bold tabular-nums text-success">{{sign .RefundDue}}{{money .RefundDue}}</p>
+        {{else}}
+        <p class="text-sm text-muted-foreground">Balance Due</p>
+        <p class="text-2xl font-bold tabular-nums text-destructive">{{sign .RefundDue}}{{money .RefundDue}}</p>
+        {{end}}
+      </div>
+    </section>
+    {{if .HasRefund}}
+    <footer class="border-t px-6 py-3 text-sm">
+      {{if .HasPrimaryBank}}
+      <p class="text-muted-foreground">Refund credit → <span class="text-foreground font-medium">{{.PrimaryBankName}}</span> <span class="text-muted-foreground font-mono">{{.PrimaryBankMasked}}</span></p>
+      {{else}}
+      <p class="text-warning"><a href="/settings?tab=tax" class="underline">Add a bank account for refund credit →</a></p>
+      {{end}}
+    </footer>
+    {{end}}
+  </div>
+
   <!-- Export -->
   <div class="card">
     <header class="flex items-center justify-between">
@@ -482,7 +539,7 @@
       </div>
       <a href="/tax/export" class="btn" data-size="lg">Download ITR-2 JSON</a>
     </header>
-    <section class="mt-4 pt-4 border-t">
+    <section class="mt-4">
       <div class="flex flex-wrap gap-2">
         <span class="badge" data-variant="secondary">Schedule S</span>
         <span class="badge" data-variant="secondary">Schedule OS</span>
@@ -493,11 +550,22 @@
         <span class="badge" data-variant="secondary">Schedule IT</span>
         <span class="badge" data-variant="secondary">Part B-TI</span>
         <span class="badge" data-variant="secondary">Part B-TTI</span>
-        <span class="badge" data-variant="outline">Bank account</span>
-        <span class="badge" data-variant="outline">Verification</span>
+        {{if .HasPrimaryBank}}<span class="badge" data-variant="secondary">Bank account ✓</span>{{else}}<span class="badge" data-variant="outline" style="color: var(--color-warning); border-color: var(--color-warning)">Bank account ⚠</span>{{end}}
+        {{if .HasVerificationDetails}}<span class="badge" data-variant="secondary">Verification ✓</span>{{else}}<span class="badge" data-variant="outline" style="color: var(--color-warning); border-color: var(--color-warning)">Verification ⚠</span>{{end}}
       </div>
     </section>
-    <section class="mt-4 pt-4 border-t">
+    {{if or (not .HasPrimaryBank) (not .HasVerificationDetails)}}
+    <section class="mt-4">
+      <div class="rounded-lg border border-warning/50 bg-warning/5 p-3 text-sm">
+        <p class="font-medium text-warning">Before you export</p>
+        <ul class="mt-1 space-y-0.5 text-muted-foreground">
+          {{if not .HasPrimaryBank}}<li>· <a href="/settings?tab=tax" class="underline">Add a bank account</a> for refund credit</li>{{end}}
+          {{if not .HasVerificationDetails}}<li>· <a href="/settings?tab=tax" class="underline">Add declarant name + verification place</a> for the ITR-2 verification block</li>{{end}}
+        </ul>
+      </div>
+    </section>
+    {{end}}
+    <section class="mt-4">
       <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">After downloading</p>
       <ol class="text-sm space-y-2.5">
         <li class="flex gap-3 items-start">
@@ -524,6 +592,86 @@
     </section>
   </div>
 
+  <!-- Clear data confirmation dialogs -->
+  <dialog class="alert-dialog" id="clear-kite-dialog" aria-labelledby="clear-kite-title" aria-describedby="clear-kite-desc">
+    <div>
+      <header>
+        <h2 id="clear-kite-title">Clear capital gains data?</h2>
+        <p id="clear-kite-desc">Removes all Kite Console trades for FY {{.FY}}. Your AIS data stays intact. You can re-import anytime.</p>
+      </header>
+      <footer>
+        <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
+        <form method="POST" action="/tax/clear-kite" class="inline">
+          <button type="submit" class="btn" data-variant="destructive">Clear</button>
+        </form>
+      </footer>
+    </div>
+  </dialog>
+
+  <dialog class="alert-dialog" id="clear-ais-dialog" aria-labelledby="clear-ais-title" aria-describedby="clear-ais-desc">
+    <div>
+      <header>
+        <h2 id="clear-ais-title">Clear all tax data?</h2>
+        <p id="clear-ais-desc">Removes the AIS import and all capital gains trades for FY {{.FY}}. The page will return to the import wizard. Your tax profile and bank accounts are not affected.</p>
+      </header>
+      <footer>
+        <button type="button" class="btn" data-variant="outline" onclick="this.closest('dialog').close()">Cancel</button>
+        <form method="POST" action="/tax/clear-ais" class="inline">
+          <button type="submit" class="btn" data-variant="destructive">Clear all</button>
+        </form>
+      </footer>
+    </div>
+  </dialog>
+
   {{end}}
 </div>
+
+<script>
+  // Enable/disable upload buttons based on file selection.
+  document.querySelectorAll('input[type="file"][name="ais"], input[type="file"][name="kite"]').forEach(input => {
+    const btn = input.form?.querySelector('button[type="submit"]');
+    if (!btn) return;
+    input.addEventListener('change', () => { btn.disabled = input.files.length === 0; });
+  });
+
+  // AJAX upload for all data-upload forms — inline status, no page redirect.
+  document.querySelectorAll('form[data-upload]').forEach(form => {
+    const btn = form.querySelector('button[type="submit"]');
+    const originalText = btn?.textContent || '';
+    const statusEl = form.parentElement?.querySelector('[data-upload-status]');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!btn || btn.disabled) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Uploading…';
+      if (statusEl) { statusEl.innerHTML = '<span class="text-muted-foreground">Uploading…</span>'; }
+
+      try {
+        const res = await fetch(form.action, { method: 'POST', body: new FormData(form) });
+        const data = await res.json();
+
+        if (res.ok) {
+          if (statusEl) {
+            statusEl.innerHTML = '<span class="text-success">\u2713 ' + (data.message || 'Done') + '</span>';
+          }
+          setTimeout(() => location.reload(), 800);
+        } else {
+          btn.disabled = false;
+          btn.textContent = originalText;
+          if (statusEl) {
+            statusEl.innerHTML = '<span class="text-destructive">' + (data.error || 'Upload failed') + '</span>';
+          }
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        if (statusEl) {
+          statusEl.innerHTML = '<span class="text-destructive">Network error — check connection and retry</span>';
+        }
+      }
+    });
+  });
+</script>
 {{end}}

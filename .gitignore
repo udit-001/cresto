@@ -12,6 +12,12 @@
 payslip-*.pdf
 payslip_*.txt
 payslips-filter-badges
+*_AIS_*.json
+*_AIS_*_decrypted.json
+taxpnl-*.xlsx
+tax_page_prototype.html
+AIS Utility_*.zip
+ITDe-Filing-*.zip
 
 # Tailwind CSS standalone binary (downloaded via `go run . tailwind download`)
 .bin/

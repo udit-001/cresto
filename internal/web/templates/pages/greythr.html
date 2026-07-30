@@ -11,25 +11,24 @@
 
     {{if .Connected}}
     <!-- ═══ Connected + valid session ═══ -->
-    <div class="rounded-lg border bg-card p-4 space-y-4">
-      <div class="flex items-center justify-between gap-4">
-        <div class="flex items-center gap-3">
-          <svg class="text-success" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          <div>
-            <div class="font-medium">{{.Host}}</div>
-            <div class="text-sm text-muted-foreground">Profile ID: {{.ProfileID}}{{if .Email}} · {{.Email}}{{end}}</div>
-          </div>
-        </div>
-        <div class="flex gap-2">
-          <form method="POST" action="/greythr/fetch">
-            <button type="submit" class="btn" data-size="sm">Fetch Payslips</button>
-          </form>
-          <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('greythr-disconnect-dialog').showModal()">Disconnect</button>
-        </div>
-      </div>
+    <article class="item" data-variant="outline">
+      <figure>
+        <svg class="text-success" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </figure>
+      <section>
+        <h3>{{.Host}}</h3>
+        <p>Profile ID: {{.ProfileID}}{{if .Email}} · {{.Email}}{{end}}</p>
+      </section>
+      <aside>
+        <form method="POST" action="/greythr/fetch">
+          <button type="submit" class="btn" data-size="sm">Fetch Payslips</button>
+        </form>
+        <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('greythr-disconnect-dialog').showModal()">Disconnect</button>
+      </aside>
+    </article>
 
       {{if .Months}}
-      <div class="border-t pt-3">
+      <div class="rounded-lg border p-4">
         <div class="text-sm font-medium mb-2">Available payslips ({{len .Months}})</div>
         <div class="space-y-1 max-h-60 overflow-y-auto">
           {{range .Months}}
@@ -42,7 +41,6 @@
         <p class="text-xs text-muted-foreground mt-2">Fetch downloads all released payslips that aren't already in Cresto. Each payslip enters as <code class="text-xs bg-muted px-1 py-0.5 rounded">pending_review</code> — confirm them in the review queue.</p>
       </div>
       {{end}}
-    </div>
 
     {{else if .Expired}}
     <!-- ═══ Connected but session expired — unified recovery box ═══ -->

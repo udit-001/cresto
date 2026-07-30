@@ -205,12 +205,20 @@ func TestGenerate_BankAccount(t *testing.T) {
 	itr2 := getITR2(t, testInput())
 	tti := itr2["PartB_TTI"].(map[string]any)
 	refund := tti["Refund"].(map[string]any)
-	bank := refund["BankAccountDetail"].(map[string]any)
-	if bank["IFSCCode"] != "HDFC0001234" {
-		t.Errorf("IFSC = %v, want HDFC0001234", bank["IFSCCode"])
+	bankDtls := refund["BankAccountDtls"].(map[string]any)
+	if bankDtls["BankDtlsFlag"] != "Y" {
+		t.Errorf("BankDtlsFlag = %v, want Y", bankDtls["BankDtlsFlag"])
 	}
-	if bank["BankAccountNumber"] != "1234567890" {
-		t.Errorf("Account number = %v, want 1234567890", bank["BankAccountNumber"])
+	details := bankDtls["AddtnlBankDetails"].([]any)
+	first := details[0].(map[string]any)
+	if first["IFSCCode"] != "HDFC0001234" {
+		t.Errorf("IFSC = %v, want HDFC0001234", first["IFSCCode"])
+	}
+	if first["BankAccountNo"] != "1234567890" {
+		t.Errorf("Account number = %v, want 1234567890", first["BankAccountNo"])
+	}
+	if first["UseForRefund"] != "Y" {
+		t.Errorf("UseForRefund = %v, want Y", first["UseForRefund"])
 	}
 }
 
@@ -238,8 +246,20 @@ func TestGenerate_NewRegimeFlag(t *testing.T) {
 func TestGenerate_CreationInfo(t *testing.T) {
 	itr2 := getITR2(t, testInput())
 	ci := itr2["CreationInfo"].(map[string]any)
-	if ci["SWCreatedBy"] != "Cresto" {
-		t.Errorf("SWCreatedBy = %v, want Cresto", ci["SWCreatedBy"])
+	if ci["SWCreatedBy"] != "SW92222526" {
+		t.Errorf("SWCreatedBy = %v, want SW92222526", ci["SWCreatedBy"])
+	}
+	if ci["JSONCreatedBy"] != "SW92222526" {
+		t.Errorf("JSONCreatedBy = %v, want SW92222526", ci["JSONCreatedBy"])
+	}
+	if ci["SWVersionNo"] != "R1" {
+		t.Errorf("SWVersionNo = %v, want R1", ci["SWVersionNo"])
+	}
+	if ci["IntermediaryCity"] != "Delhi" {
+		t.Errorf("IntermediaryCity = %v, want Delhi", ci["IntermediaryCity"])
+	}
+	if ci["Digest"] != "-" {
+		t.Errorf("Digest = %v, want -", ci["Digest"])
 	}
 }
 
@@ -297,6 +317,17 @@ func TestGenerate_TaxComputation(t *testing.T) {
 	}
 	if _, ok := comp["Rebate87A"]; !ok {
 		t.Error("Rebate87A should be present")
+	}
+	taxPaid := tti["TaxPaid"].(map[string]any)
+	taxesPaid := taxPaid["TaxesPaid"].(map[string]any)
+	if _, ok := taxesPaid["TDS"]; !ok {
+		t.Error("TaxPaid.TaxesPaid should have TDS field")
+	}
+	if _, ok := taxesPaid["TotalTaxesPaid"]; !ok {
+		t.Error("TaxPaid.TaxesPaid should have TotalTaxesPaid field")
+	}
+	if _, ok := taxPaid["BalTaxPayable"]; !ok {
+		t.Error("TaxPaid should have BalTaxPayable field")
 	}
 }
 

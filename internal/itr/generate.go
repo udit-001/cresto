@@ -42,17 +42,25 @@ func Generate(in Input) ([]byte, error) {
 
 	b := in.TaxBreakdown
 	primaryBank := primaryAccount(in.BankAccounts)
+	totalTDS := 0
+	for _, tds := range in.AIS.TDS {
+		totalTDS += toInt(tds.TDS)
+	}
+	totalAdvanceTax := 0
+	for _, at := range in.AIS.AdvanceTax {
+		totalAdvanceTax += toInt(at.Total)
+	}
 
 	doc := map[string]any{
 		"ITR": map[string]any{
 			"ITR2": map[string]any{
 				"CreationInfo": map[string]any{
-					"SWVersionNo":      "1.2.2",
-					"SWCreatedBy":      "Cresto",
-					"JSONCreatedBy":    "Cresto",
+					"SWVersionNo":      "R1",
+					"SWCreatedBy":      "SW92222526",
+					"JSONCreatedBy":    "SW92222526",
 					"JSONCreationDate": time.Now().Format("02/01/2006 15:04:05"),
-					"IntermediaryCity": "",
-					"Digest":           "",
+					"IntermediaryCity": "Delhi",
+					"Digest":           "-",
 				},
 				"Form_ITR2": map[string]any{
 					"FormName":       "ITR-2",
@@ -72,7 +80,7 @@ func Generate(in Input) ([]byte, error) {
 				"ScheduleTDS2":    buildScheduleTDS2(in),
 				"ScheduleIT":      buildScheduleIT(in),
 				"PartB-TI":        buildPartBTI(b),
-				"PartB_TTI":       buildPartBTTI(b, primaryBank),
+				"PartB_TTI":       buildPartBTTI(b, primaryBank, totalTDS, totalAdvanceTax),
 				"Verification":    buildVerification(in),
 			},
 		},
@@ -373,10 +381,6 @@ func buildScheduleTDS2(in Input) map[string]any {
 		}
 		tdsAmt := toInt(tds.TDS)
 		totalTDS += tdsAmt
-		head := "OS"
-		if tds.Section == "194A" || tds.Section == "194K" {
-			head = "OS"
-		}
 		entries = append(entries, map[string]any{
 			"TDSCreditName": tds.Deductor,
 			"TANOfDeductor": tds.TAN,
@@ -387,7 +391,7 @@ func buildScheduleTDS2(in Input) map[string]any {
 				"TaxClaimedOwnHands": 0,
 			},
 			"GrossAmount":   toInt(tds.Income),
-			"HeadOfIncome":  head,
+			"HeadOfIncome":  "OS",
 			"AmtCarriedFwd": map[string]any{},
 		})
 	}
@@ -461,22 +465,42 @@ func buildPartBTI(b tax.Breakdown) map[string]any {
 	}
 }
 
-func buildPartBTTI(b tax.Breakdown, bank *store.BankAccount) map[string]any {
+func buildPartBTTI(b tax.Breakdown, bank *store.BankAccount, totalTDS, totalAdvanceTax int) map[string]any {
 	surcharge := toInt(b.Surcharge)
 	cess := toInt(b.Cess)
 	totalTax := toInt(b.TotalTaxLiability)
-	bankSection := map[string]any{
-		"BankAccountDetail": map[string]any{},
+
+	bankDtls := map[string]any{
+		"BankDtlsFlag":       "Y",
+		"AddtnlBankDetails":  []map[string]any{},
+		"ForeignBankDetails": []map[string]any{},
 	}
 	if bank != nil {
-		bankSection = map[string]any{
-			"BankAccountDetail": map[string]any{
-				"IFSCCode":          bank.IFSC,
-				"BankAccountNumber": bank.AccountNumber,
-				"AccountType":       strings.Title(bank.AccountType),
+		bankDtls = map[string]any{
+			"BankDtlsFlag": "Y",
+			"AddtnlBankDetails": []map[string]any{
+				{
+					"IFSCCode":      bank.IFSC,
+					"BankName":      bank.BankName,
+					"BankAccountNo": bank.AccountNumber,
+					"AccountType":   strings.Title(bank.AccountType),
+					"UseForRefund":  "Y",
+				},
 			},
+			"ForeignBankDetails": []map[string]any{},
 		}
 	}
+
+	totalTaxesPaid := totalTDS + totalAdvanceTax
+	refundDue := totalTaxesPaid - totalTax
+	if refundDue < 0 {
+		refundDue = 0
+	}
+	balTaxPayable := totalTax - totalTaxesPaid
+	if balTaxPayable < 0 {
+		balTaxPayable = 0
+	}
+
 	return map[string]any{
 		"TaxPayDeemedTotIncUs115JC":  0,
 		"Surcharge":                  surcharge,
@@ -510,13 +534,19 @@ func buildPartBTTI(b tax.Breakdown, bank *store.BankAccount) map[string]any {
 			"AggregateTaxInterestLiability": totalTax,
 		},
 		"TaxPaid": map[string]any{
-			"TotalTDS":        toInt(b.NormalRateTax + b.SpecialRateTax),
-			"TotalTDSClaim":   toInt(b.NormalRateTax + b.SpecialRateTax),
-			"TotalAdvTax":     0,
-			"TotalSelfAssTax": 0,
-			"TotalTAXPaid":    toInt(b.NormalRateTax + b.SpecialRateTax),
+			"TaxesPaid": map[string]any{
+				"AdvanceTax":        totalAdvanceTax,
+				"TDS":               totalTDS,
+				"TCS":               0,
+				"SelfAssessmentTax": 0,
+				"TotalTaxesPaid":    totalTaxesPaid,
+			},
+			"BalTaxPayable": balTaxPayable,
 		},
-		"Refund":            bankSection,
+		"Refund": map[string]any{
+			"RefundDue":       refundDue,
+			"BankAccountDtls": bankDtls,
+		},
 		"AssetOutIndiaFlag": "N",
 	}
 }

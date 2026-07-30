@@ -10,6 +10,25 @@ import (
 	"cresto/internal/store"
 )
 
+// dobToISO converts the stored DDMMYYYY format (used for AIS decryption) to
+// YYYY-MM-DD for rendering in an <input type="date">. Returns "" if the input
+// isn't the expected 8 digits.
+func dobToISO(dob string) string {
+	if len(dob) != 8 {
+		return ""
+	}
+	return dob[4:8] + "-" + dob[2:4] + "-" + dob[0:2]
+}
+
+// dobFromISO converts the YYYY-MM-DD value submitted by <input type="date">
+// to DDMMYYYY for storage (AIS decryption key derivation).
+func dobFromISO(iso string) string {
+	if len(iso) != 10 || iso[4] != '-' || iso[7] != '-' {
+		return strings.ReplaceAll(iso, "-", "")
+	}
+	return iso[8:10] + iso[5:7] + iso[0:4]
+}
+
 // settingsView is the view model for the /settings page. Groups all external
 // service connections: brokers (Groww + Kite), greytHR, LLM Studio, and the
 // taxpayer profile (PAN/DOB/verification) + bank accounts.
@@ -31,6 +50,9 @@ type settingsView struct {
 
 	// Bank accounts — one-to-many, one primary.
 	BankAccounts []store.BankAccount
+
+	// ActiveTab controls which tab is selected on initial render (server-side).
+	ActiveTab string
 }
 
 type greythrStatus struct {
@@ -70,13 +92,20 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if prof, err := s.store.GetTaxpayerProfile(ctx); err == nil {
 		v.HasProfile = true
 		v.PAN = prof.PAN
-		v.DOB = prof.DOB
+		v.DOB = dobToISO(prof.DOB)
 		v.DeclarantName = prof.DeclarantName
 		v.VerifyPlace = prof.VerificationPlace
 	}
 
 	// Bank accounts.
 	v.BankAccounts, _ = s.store.ListBankAccounts(ctx)
+
+	// Active tab — server-side default from ?tab= query param.
+	tab := r.URL.Query().Get("tab")
+	if tab != "connections" && tab != "tax" && tab != "engine" {
+		tab = "connections"
+	}
+	v.ActiveTab = tab
 
 	s.render(w, "settings", struct {
 		pageData
@@ -125,7 +154,7 @@ func (s *Server) handleSettingsTaxProfile(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	prof := store.TaxpayerProfile{
 		PAN:               strings.ToUpper(strings.TrimSpace(r.FormValue("pan"))),
-		DOB:               strings.TrimSpace(r.FormValue("dob")),
+		DOB:               dobFromISO(strings.TrimSpace(r.FormValue("dob"))),
 		DeclarantName:     strings.TrimSpace(r.FormValue("declarant_name")),
 		VerificationPlace: strings.TrimSpace(r.FormValue("verification_place")),
 	}

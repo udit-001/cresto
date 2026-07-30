@@ -24,7 +24,7 @@ func TestSettings_TaxProfile_SaveThenLoad(t *testing.T) {
 	defer cleanup()
 
 	rec := doPostForm(srv, "/settings/tax-profile",
-		"pan=ABCDE1234F&dob=15061990&declarant_name=Udit+Mittal&verification_place=Bangalore")
+		"pan=ABCDE1234F&dob=1990-06-15&declarant_name=John+Doe&verification_place=Anytown")
 	if rec.Code != 303 {
 		t.Fatalf("POST tax-profile: status = %d, want 303", rec.Code)
 	}
@@ -34,10 +34,10 @@ func TestSettings_TaxProfile_SaveThenLoad(t *testing.T) {
 	if !strings.Contains(body, "ABCDE1234F") {
 		t.Error("settings page should show saved PAN")
 	}
-	if !strings.Contains(body, "15061990") {
-		t.Error("settings page should show saved DOB")
+	if !strings.Contains(body, "1990-06-15") {
+		t.Error("settings page should show saved DOB as ISO date")
 	}
-	if !strings.Contains(body, "Udit Mittal") {
+	if !strings.Contains(body, "John Doe") {
 		t.Error("settings page should show saved declarant name")
 	}
 }
@@ -47,9 +47,9 @@ func TestSettings_TaxProfile_Overwrite(t *testing.T) {
 	defer cleanup()
 
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=OLD1234A&dob=01011990&declarant_name=Old&verification_place=OldCity")
+		"pan=OLD1234A&dob=1990-01-01&declarant_name=Old&verification_place=OldCity")
 	doPostForm(srv, "/settings/tax-profile",
-		"pan=NEW5678B&dob=02021991&declarant_name=New&verification_place=NewCity")
+		"pan=NEW5678B&dob=1991-02-02&declarant_name=New&verification_place=NewCity")
 
 	rec, _ := doGet(srv, "/settings")
 	body := rec.Body.String()
@@ -70,8 +70,8 @@ func TestSettings_BankAccounts_EmptyPage_HasAddForm(t *testing.T) {
 	if !strings.Contains(body, "Bank Accounts") {
 		t.Error("settings page should have a Bank Accounts section")
 	}
-	if !strings.Contains(body, "Add bank account") {
-		t.Error("settings page should have an add bank account form")
+	if !strings.Contains(body, `name="ifsc"`) {
+		t.Error("settings page should have an add bank account form (IFSC field)")
 	}
 }
 
