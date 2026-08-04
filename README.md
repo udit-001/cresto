@@ -2,7 +2,7 @@
 
 Your income grows, your wealth grows, your financial understanding grows.
 
-Server-rendered Go monolith for tracking income from payslips and broker holdings. Uses a local LLM (LM Studio) for automated vision-based PDF extraction, with direct JSON auto-fetch from greytHR.
+Server-rendered Go monolith for tracking income from payslips, broker holdings, and tax filing. Uses a local LLM (LM Studio) for automated vision-based PDF extraction, with direct JSON auto-fetch from greytHR.
 
 ## Quick start
 
@@ -15,6 +15,9 @@ Opens at `http://localhost:7777`. Point it at your payslip PDFs and Cresto extra
 ## Features
 
 - **Payslip ingestion** — PDF upload with LLM vision extraction, or auto-fetch from greytHR (JSON-first, no LLM needed)
+- **Tax filing** — import AIS, reconcile TDS against payslips, compute new-regime liability, export ITR-2 JSON
+- **Form 16 archival** — fetch and store TDS certificates from greytHR
+- **Agent-friendly CLI** — read tax + payslip data via `cresto tax` (PII redacted, `--json`)
 - **Broker holdings** — live equity + MF holdings from Groww and Zerodha (Kite) via MCP
 - **Browser extension** — one-click greytHR connection and Kite auth redirect (Firefox + Chrome)
 - **Charts & analytics** — YTD breakdowns, year-over-year trends, canonical component aggregation
