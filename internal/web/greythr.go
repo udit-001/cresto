@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -337,6 +340,123 @@ func (s *Server) handleGreytHRMonthsAPI(w http.ResponseWriter, r *http.Request) 
 	}
 
 	json.NewEncoder(w).Encode(greythrMonthsJSON{Connected: true, Months: months.Months})
+}
+
+// handleGreytHRForm16Fetch downloads all published Form 16 documents from
+// the connected greytHR tenant and stores them as archived PDFs.
+func (s *Server) handleGreytHRForm16Fetch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if !s.greythr.Connected() {
+		jsonError(w, http.StatusBadRequest, "greytHR not connected")
+		return
+	}
+
+	docs, err := s.greythr.ListForm16(r.Context())
+	if err != nil {
+		if errors.Is(err, greythr.ErrNotConnected) {
+			jsonError(w, http.StatusUnauthorized, "Session expired. Reconnect via the web UI.")
+			return
+		}
+		jsonError(w, http.StatusInternalServerError, "Could not list Form 16: "+err.Error())
+		return
+	}
+
+	if len(docs) == 0 {
+		jsonError(w, http.StatusOK, "No Form 16 documents found on greytHR.")
+		return
+	}
+
+	form16Dir := filepath.Join(s.cfg.DataDir, "form16")
+	if err := os.MkdirAll(form16Dir, 0o700); err != nil {
+		jsonError(w, http.StatusInternalServerError, "Could not create form16 directory: "+err.Error())
+		return
+	}
+
+	sess, _ := s.greythr.LoadSession()
+	employerName := greythr.DeriveEmployerName(sess.Host)
+
+	fetched, failed := 0, 0
+	for _, doc := range docs {
+		part := doc.Part
+		if doc.TaxYear == 0 {
+			failed++
+			continue
+		}
+
+		pdfBody, _, err := s.greythr.DownloadForm16(r.Context(), doc.ID)
+		if err != nil {
+			failed++
+			continue
+		}
+
+		filename := fmt.Sprintf("%s_form16_part%s_fy%d.pdf", employerName, part, doc.TaxYear)
+		diskPath := filepath.Join(form16Dir, filename)
+		if err := savePDFToDisk(diskPath, pdfBody); err != nil {
+			failed++
+			continue
+		}
+
+		if err := s.store.SaveForm16Document(r.Context(), store.Form16Document{
+			EmployerName: employerName,
+			FYStartYear:  doc.TaxYear,
+			Part:         part,
+			Source:       "greythr",
+			FilePath:     diskPath,
+		}); err != nil {
+			failed++
+			continue
+		}
+		fetched++
+	}
+
+	msg := fmt.Sprintf("Fetched %d Form 16 document(s)", fetched)
+	if failed > 0 {
+		msg += fmt.Sprintf(", %d failed", failed)
+	}
+	jsonOK(w, msg)
+}
+
+func savePDFToDisk(path string, r io.ReadCloser) error {
+	defer r.Close()
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(f, r)
+	return err
+}
+
+// handleForm16View serves a stored Form 16 PDF for inline viewing.
+func (s *Server) handleForm16View(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.renderError(w, http.StatusBadRequest, "Invalid Form 16 document ID.")
+		return
+	}
+	docs, err := s.store.ListForm16Documents(r.Context())
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, "Could not load Form 16 documents.")
+		return
+	}
+	var found *store.Form16Document
+	for i := range docs {
+		if docs[i].ID == id {
+			found = &docs[i]
+			break
+		}
+	}
+	if found == nil {
+		s.renderError(w, http.StatusNotFound, "Form 16 document not found.")
+		return
+	}
+	w.Header().Set("Content-Type", "application/pdf")
+	http.ServeFile(w, r, found.FilePath)
 }
 
 // handleGreytHRExtension serves the Mozilla-signed XPI for one-click install

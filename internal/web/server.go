@@ -411,6 +411,7 @@ func New(s *store.Store, client LLMClient, cfg config.Config, pdfs *pdfstore.Sto
 	for _, name := range pageNames {
 		t, err := template.New("").Funcs(tmplFuncs).ParseFS(contentFS,
 			"templates/layout.html",
+			"templates/partials/pdf_preview.html",
 			"templates/pages/"+name+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse template %q: %w", name, err)
@@ -522,6 +523,8 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("POST /greythr/connect", s.handleGreytHRConnect)
 	mux.HandleFunc("POST /greythr/disconnect", s.handleGreytHRDisconnect)
 	mux.HandleFunc("POST /greythr/fetch", s.handleGreytHRFetch)
+	mux.HandleFunc("POST /greythr/form16", s.handleGreytHRForm16Fetch)
+	mux.HandleFunc("GET /form16/{id}", s.handleForm16View)
 	mux.HandleFunc("GET /api/greythr/months", s.handleGreytHRMonthsAPI)
 
 	// Extension downloads: Firefox gets a signed XPI (one-click install),

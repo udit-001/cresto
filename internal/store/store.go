@@ -1877,3 +1877,94 @@ func (s *Store) DeleteCapitalGainsTrades(ctx context.Context, fyStartYear int) e
 		`DELETE FROM capital_gains_trades WHERE fy_start_year = ?`, fyStartYear)
 	return err
 }
+
+// MatchEmployerTDS fuzzy-matches an AIS deductor name against employer names
+// from confirmed payslips. Tries exact (case-insensitive) first, then
+// substring containment in either direction. Shared by the web tax handler
+// and the CLI tax commands for TDS reconciliation.
+func MatchEmployerTDS(aisName string, employers map[string]EmployerTDS) (EmployerTDS, bool) {
+	aisUpper := strings.ToUpper(strings.TrimSpace(aisName))
+	for name, emp := range employers {
+		empUpper := strings.ToUpper(strings.TrimSpace(name))
+		if aisUpper == empUpper {
+			return emp, true
+		}
+		if strings.Contains(aisUpper, empUpper) || strings.Contains(empUpper, aisUpper) {
+			return emp, true
+		}
+	}
+	return EmployerTDS{}, false
+}
+
+// Form16Document is one Form 16 file (Part A or Part B) from an employer.
+// Stored as an archived PDF — not parsed or extracted.
+type Form16Document struct {
+	ID           int64
+	EmployerName string
+	FYStartYear  int
+	Part         string // "A" or "B"
+	Source       string // "greythr" or "manual"
+	FilePath     string
+	FetchedAt    string
+}
+
+// SaveForm16Document upserts a Form 16 document. If a row already exists for
+// the same (employer, fy, part) triple, its path and timestamp are overwritten.
+func (s *Store) SaveForm16Document(ctx context.Context, d Form16Document) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO form16_documents (employer_name, fy_start_year, part, source, file_path)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(employer_name, fy_start_year, part) DO UPDATE SET
+		   source = excluded.source,
+		   file_path = excluded.file_path,
+		   fetched_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')`,
+		d.EmployerName, d.FYStartYear, d.Part, d.Source, d.FilePath)
+	return err
+}
+
+// ListForm16Documents returns all Form 16 documents ordered by FY descending.
+func (s *Store) ListForm16Documents(ctx context.Context) ([]Form16Document, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, employer_name, fy_start_year, part, source, file_path, fetched_at
+		 FROM form16_documents ORDER BY fy_start_year DESC, employer_name, part`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Form16Document
+	for rows.Next() {
+		var d Form16Document
+		if err := rows.Scan(&d.ID, &d.EmployerName, &d.FYStartYear, &d.Part, &d.Source, &d.FilePath, &d.FetchedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// ListForm16DocumentsForFY returns all Form 16 documents for the given FY.
+func (s *Store) ListForm16DocumentsForFY(ctx context.Context, fyStartYear int) ([]Form16Document, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, employer_name, fy_start_year, part, source, file_path, fetched_at
+		 FROM form16_documents WHERE fy_start_year = ? ORDER BY employer_name, part`,
+		fyStartYear)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Form16Document
+	for rows.Next() {
+		var d Form16Document
+		if err := rows.Scan(&d.ID, &d.EmployerName, &d.FYStartYear, &d.Part, &d.Source, &d.FilePath, &d.FetchedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// DeleteForm16Document removes a Form 16 document by ID.
+func (s *Store) DeleteForm16Document(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM form16_documents WHERE id = ?`, id)
+	return err
+}

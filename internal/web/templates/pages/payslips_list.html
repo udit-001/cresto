@@ -325,43 +325,7 @@
   })();
 </script>
 
-<dialog id="pdf-preview-dialog" class="dialog" aria-labelledby="pdf-preview-title">
-  <div class="flex flex-col gap-0 h-[85vh] w-[min(90vw,800px)]">
-    <header class="flex flex-row items-center justify-between gap-4 pb-1">
-      <h2 id="pdf-preview-title" class="text-sm font-semibold m-0">PDF preview</h2>
-      <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close preview" onclick="this.closest('dialog').close()">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-      </button>
-    </header>
-    <section class="flex-1 overflow-hidden">
-      <div class="pdf-spoiler relative w-full h-full">
-        <embed id="pdf-preview-embed" type="application/pdf" class="w-full h-full border-0 rounded" tabindex="-1" onfocus="this.blur()">
-        <button type="button" class="pdf-spoiler-overlay absolute inset-0 flex items-center justify-center bg-muted/80 backdrop-blur-sm rounded cursor-pointer" aria-label="Reveal PDF">
-          <span class="flex flex-col items-center gap-2 text-muted-foreground">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-            <span class="text-sm font-medium">Click to reveal PDF</span>
-          </span>
-        </button>
-      </div>
-    </section>
-  </div>
-</dialog>
-
-<script>
-  function openPdfPreview(url) {
-    const dlg = document.getElementById('pdf-preview-dialog');
-    const embed = document.getElementById('pdf-preview-embed');
-    if (!dlg || !embed) return;
-    embed.src = url + '#pagemode=none';
-    dlg.showModal();
-  }
-  // Clear the embed src when the dialog closes so the PDF isn't kept in memory.
-  // Also reset the spoiler so it reappears next time (if privacy mode is on).
-  document.getElementById('pdf-preview-dialog')?.addEventListener('close', () => {
-    document.getElementById('pdf-preview-embed').src = '';
-    document.querySelector('#pdf-preview-dialog .pdf-spoiler')?.classList.remove('revealed');
-  });
-</script>
+  {{template "pdf_preview" .}}
 {{end}}
 {{end}}
 {{end}}

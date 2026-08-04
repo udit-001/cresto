@@ -20,8 +20,11 @@
         <p>Profile ID: {{.ProfileID}}{{if .Email}} · {{.Email}}{{end}}</p>
       </section>
       <aside>
-        <form method="POST" action="/greythr/fetch">
+        <form method="POST" action="/greythr/fetch" style="display:inline">
           <button type="submit" class="btn" data-size="sm">Fetch Payslips</button>
+        </form>
+        <form method="POST" action="/greythr/form16" style="display:inline">
+          <button type="submit" class="btn" data-variant="outline" data-size="sm">Fetch Form 16</button>
         </form>
         <button type="button" class="btn" data-variant="ghost" data-size="sm" onclick="document.getElementById('greythr-disconnect-dialog').showModal()">Disconnect</button>
       </aside>

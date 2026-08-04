@@ -171,11 +171,47 @@ Cresto fetches payslips from greytHR's Employee Self Service (ESS) portal using 
 
 - `cresto greythr fetch` — fetch all unpublished payslips. Reads saved session, dedups against existing DB payslips by period, skips empty (zero-value) months. No server required (reads session file + writes to DB directly).
 
+### Form 16 documents
+
+Form 16 PDFs are archived for record keeping (Part A from TRACES + Part B from employer) — **not parsed or extracted**. They surface as a readiness badge + list card on `/tax` and serve via `GET /form16/{id}`. Table: `form16_documents` (employer_name, fy_start_year, part A|B, source greythr|manual, file_path, fetched_at), unique per (employer, fy, part).
+
+**Form 16 lives under `tax`, not `greythr`** — it's a tax artifact, so the surface uses the `tax` leading word:
+- `cresto tax form16` — list Form 16 documents on file (`--fy` to filter, `--json`). `form16_on_file` readiness flag on `cresto tax` too.
+- `cresto tax form16 fetch` — sync Form 16 PDFs from the connected greytHR tenant (`GET /core-hr/v1/documents/form16` list → `GET /core-hr/v1/documents/{pid}/form16/{doc_id}/preview` download). Stores at `~/.cresto/form16/{host}_form16_part{A|B}_fy{YYYY}.pdf`, records in `form16_documents`.
+
 ### Limitations
 
 - **Cookie expires**: greytHR sessions are short-lived (Ory Kratos tokens). Reconnect via web UI (`/greythr` → paste new token).
 - **Reverse-engineered API**: uses greytHR's internal ESS endpoints, not the official admin API. Could change with greytHR updates.
 - **Single profile**: one greytHR account per Cresto instance (one session file).
+- **Form 16 is per greytHR tenant**: only fetches from the connected employer. Other employers' Form 16 need manual upload (not yet wired — `source` column supports `manual`).
+
+## Tax filing (ITR-2)
+
+Cresto imports AIS JSON from the Income Tax Portal, reconciles it against payslip data, computes new-regime tax liability (Section 115BAC, FY 2025-26), and exports an ITR-2 JSON.
+
+### Architecture
+
+- `internal/ais/` — AES decryption (PAN+DOB key) + JSON parsing of AIS into structured types (`SalaryEntry`, `InterestEntry`, `DividendEntry`, `TDSEntry`, `SecuritySale`, `AdvanceTaxEntry`).
+- `internal/tax/tax.go` — pure-function new-regime tax calculator. `Compute(Input) Breakdown` handles slabs, rebate 87A, marginal relief, surcharge, cess.
+- `internal/kiteconsole/` — XLSX parser for Zerodha Console Tax P&L exports (FIFO-matched trades).
+- `internal/itr/` — ITR-2 JSON generator.
+- `internal/store/` — `TaxpayerProfile`, `BankAccount`, `AISImport`, `CapitalGainsTrade`, `EmployerTDS`, `MatchEmployerTDS` (shared fuzzy employer-name matching for TDS recon).
+- AIS JSON stored decrypted on disk at `~/.cresto/ais/fy<YYYY>.json`. One import per FY.
+
+### Web UI
+
+- `/tax` — AIS import wizard (empty state) / populated view with AIS tables, TDS reconciliation, tax computation, refund/dues, ITR-2 export.
+- `/settings` — taxpayer profile (PAN, DOB, declarant name, verification place) + bank accounts.
+
+### CLI commands (for agents)
+
+All commands default to the latest AIS import's FY. Use `--fy 2025` to override. All support `--json`. PII is redacted — employer/deductor names (Section 192) hashed with the same `employer_<4hex>` as payslips; PAN/DOB/name/IFSC/account-number/TAN/receipt-IDs dropped; bank/company names and securities kept (public institutions).
+
+- `cresto tax` — tax liability summary: income totals, `tax.Breakdown` (full computation), refund/dues, readiness flags (`ais_imported`, `cg_imported`, `profile_set`, `primary_bank_set`, `export_ready`).
+- `cresto tax income` — AIS income entries: salary (hashed employers), savings/FD interest, dividends, securities sales, advance/self-assessment tax.
+- `cresto tax capital-gains` — Kite Console FIFO-matched trades with buy/sell, taxable profit, FMV, STT.
+- `cresto tax tds` — TDS reconciliation: AIS TDS per deductor vs Cresto payslip-derived TDS. Status: `match`, `gap`, or `no_payslips`.
 
 ## Browser extension
 

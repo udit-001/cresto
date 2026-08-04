@@ -54,30 +54,30 @@ type Input struct {
 // Breakdown is the full tax computation result: income split, slab tax,
 // rebate, marginal relief, surcharge, cess, and total liability.
 type Breakdown struct {
-	GrossSalary        float64
-	StandardDeduction  float64
-	TaxableSalary      float64
-	SavingsInterest    float64
-	FDInterest         float64
-	Dividends          float64
-	NormalRateIncome   float64
-	STCG               float64
-	LTCG               float64
-	LTCGExemption      float64
-	TaxableSTCG        float64
-	TaxableLTCG        float64
-	SpecialRateIncome  float64
-	TotalTaxableIncome float64
+	GrossSalary        float64 `json:"gross_salary"`
+	StandardDeduction  float64 `json:"standard_deduction"`
+	TaxableSalary      float64 `json:"taxable_salary"`
+	SavingsInterest    float64 `json:"savings_interest"`
+	FDInterest         float64 `json:"fd_interest"`
+	Dividends          float64 `json:"dividends"`
+	NormalRateIncome   float64 `json:"normal_rate_income"`
+	STCG               float64 `json:"stcg"`
+	LTCG               float64 `json:"ltcg"`
+	LTCGExemption      float64 `json:"ltcg_exemption"`
+	TaxableSTCG        float64 `json:"taxable_stcg"`
+	TaxableLTCG        float64 `json:"taxable_ltcg"`
+	SpecialRateIncome  float64 `json:"special_rate_income"`
+	TotalTaxableIncome float64 `json:"total_taxable_income"`
 
-	NormalRateTax     float64
-	SpecialRateTax    float64
-	Rebate87A         float64
-	MarginalRelief    float64
-	TaxAfterRelief    float64
-	SurchargeRate     float64
-	Surcharge         float64
-	Cess              float64
-	TotalTaxLiability float64
+	NormalRateTax     float64 `json:"normal_rate_tax"`
+	SpecialRateTax    float64 `json:"special_rate_tax"`
+	Rebate87A         float64 `json:"rebate_87a"`
+	MarginalRelief    float64 `json:"marginal_relief"`
+	TaxAfterRelief    float64 `json:"tax_after_relief"`
+	SurchargeRate     float64 `json:"surcharge_rate"`
+	Surcharge         float64 `json:"surcharge"`
+	Cess              float64 `json:"cess"`
+	TotalTaxLiability float64 `json:"total_tax_liability"`
 }
 
 // Compute applies the new-regime (Section 115BAC) tax computation for

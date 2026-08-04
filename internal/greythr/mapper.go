@@ -113,7 +113,7 @@ func MapToPayslip(data *PayslipData, month PayslipMonth, host string, canonicals
 	payMonth, payYear := parseFromDate(month.FromDate)
 
 	p := store.Payslip{
-		EmployerName:   deriveEmployerName(host),
+		EmployerName:   DeriveEmployerName(host),
 		PayPeriodMonth: payMonth,
 		PayPeriodYear:  payYear,
 		Status:         store.StatusPendingReview,
@@ -213,7 +213,10 @@ func parseFromDate(fromDate string) (month, year int) {
 	return int(t.Month()), t.Year()
 }
 
-func deriveEmployerName(host string) string {
+// DeriveEmployerName derives a readable employer name from a greytHR host
+// subdomain — "gyansys.greythr.com" → "Gyansys". Used consistently by payslip
+// mapping and Form 16 fetching so both store the same canonical employer name.
+func DeriveEmployerName(host string) string {
 	parts := strings.SplitN(host, ".", 2)
 	name := parts[0]
 	if name == "" {

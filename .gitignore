@@ -19,6 +19,16 @@ tax_page_prototype.html
 AIS Utility_*.zip
 ITDe-Filing-*.zip
 
+# Income Tax portal downloads (AIS, ITR, challan receipts, verification zips)
+ITR-*.json
+ITR-*.zip
+ITR2_*.json
+ITR2_*.zip
+*_ChallanReceipt.pdf
+[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].json
+*[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].json
+BLUPM*-*.zip
+
 # Tailwind CSS standalone binary (downloaded via `go run . tailwind download`)
 .bin/
 

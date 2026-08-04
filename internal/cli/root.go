@@ -75,8 +75,8 @@ func isSkippedCommand(cmd *cobra.Command) bool {
 	if cmd.Parent() != nil && skippedParents[cmd.Parent().Name()] {
 		return true
 	}
-	// Any parent-only command (has subcommands, no Run) just shows help.
-	if cmd.HasSubCommands() {
+	// Parent-only commands (has subcommands, no Run/RunE) just show help.
+	if cmd.HasSubCommands() && cmd.RunE == nil && cmd.Run == nil {
 		return true
 	}
 	// Leaf operational commands that manage their own resources.

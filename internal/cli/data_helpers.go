@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 // part when it's .00. Mirrors the web layer's formatMoneyPlain so CLI and
 // web agree on number rendering.
 func moneyPlain(v float64) string {
+	v = math.Round(v*100) / 100
 	if v == float64(int64(v)) {
 		return humanize.Comma(int64(v))
 	}

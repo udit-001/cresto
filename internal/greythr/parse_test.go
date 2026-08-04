@@ -114,3 +114,18 @@ func TestYTDSummary_YTDForMonth(t *testing.T) {
 		t.Errorf("May BASIC YTD = %v, want 225000", ytdMay["BASIC"])
 	}
 }
+
+func TestForm16Part(t *testing.T) {
+	cases := []struct{ title, want string }{
+		{"Form16-2025-2026 Part A", "A"},
+		{"Form16-2025-2026 Part B", "B"},
+		{"Form16-2024-2025 PART B", "B"},
+		{"Form16-2025-2026 part a", "A"},
+		{"Some random document", "A"},
+	}
+	for _, c := range cases {
+		if got := form16Part(c.title); got != c.want {
+			t.Errorf("form16Part(%q) = %q, want %q", c.title, got, c.want)
+		}
+	}
+}

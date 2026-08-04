@@ -397,6 +397,107 @@ func (c *Client) DownloadPayslipPDF(ctx context.Context, payslipID int) (io.Read
 
 // --- internal helpers ---
 
+// Form16Document is one Form 16 file (Part A or Part B) from the document center.
+type Form16Document struct {
+	ID          string
+	Title       string
+	FileName    string
+	Category    string // FY string, e.g. "2025-2026"
+	Part        string // "A" or "B", derived from the title
+	TaxYear     int
+	CreatedDate string
+}
+
+// ListForm16 returns all published Form 16 documents (Part A + Part B per FY).
+func (c *Client) ListForm16(ctx context.Context) ([]Form16Document, error) {
+	sess, err := c.loadSession()
+	if err != nil {
+		return nil, ErrNotConnected
+	}
+	url := fmt.Sprintf("https://%s/core-hr/v1/documents/form16", sess.Host)
+	body, err := c.getRaw(ctx, sess, url)
+	if err != nil {
+		return nil, fmt.Errorf("list form16: %w", err)
+	}
+
+	var raw []struct {
+		Category string `json:"category"`
+		Data     []struct {
+			ID          string `json:"id"`
+			Title       string `json:"title"`
+			FileName    string `json:"fileName"`
+			Category    string `json:"category"`
+			TaxYear     int    `json:"taxYear"`
+			CreatedDate string `json:"createdDate"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("parse form16 list: %w", err)
+	}
+
+	var out []Form16Document
+	for _, group := range raw {
+		for _, d := range group.Data {
+			out = append(out, Form16Document{
+				ID:          d.ID,
+				Title:       d.Title,
+				FileName:    d.FileName,
+				Category:    d.Category,
+				Part:        form16Part(d.Title),
+				TaxYear:     d.TaxYear,
+				CreatedDate: d.CreatedDate,
+			})
+		}
+	}
+	return out, nil
+}
+
+// form16Part derives "A" or "B" from a Form 16 document title. Titles are
+// like "Form16-2025-2026 Part A". Non-B titles fall back to "A".
+func form16Part(title string) string {
+	if strings.Contains(strings.ToUpper(title), "PART B") {
+		return "B"
+	}
+	return "A"
+}
+
+// DownloadForm16 downloads a Form 16 PDF by document ID. Returns the PDF
+// stream, a filename (with host prefix for multi-employer disambiguation),
+// and an error.
+func (c *Client) DownloadForm16(ctx context.Context, docID string) (io.ReadCloser, string, error) {
+	sess, err := c.loadSession()
+	if err != nil {
+		return nil, "", ErrNotConnected
+	}
+
+	url := fmt.Sprintf("https://%s/core-hr/v1/documents/%d/form16/%s/preview", sess.Host, sess.ProfileID, docID)
+	resp, err := c.doGet(ctx, sess, url)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if resp.StatusCode == 401 {
+		resp.Body.Close()
+		return nil, "", ErrNotConnected
+	}
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		return nil, "", fmt.Errorf("download form16: HTTP %d", resp.StatusCode)
+	}
+
+	filename := "form16.pdf"
+	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
+		if idx := strings.Index(cd, "filename="); idx >= 0 {
+			filename = strings.Trim(cd[idx+9:], `"`)
+		}
+	}
+	if idx := strings.Index(sess.Host, "."); idx > 0 {
+		filename = sess.Host[:idx] + "_" + filename
+	}
+
+	return resp.Body, filename, nil
+}
+
 // getRaw performs an authenticated GET and returns the response body.
 // Returns ErrNotConnected on 401. Internal seam used by FetchEmployeeInfo
 // so transport and parsing can be tested independently.

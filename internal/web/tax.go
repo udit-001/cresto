@@ -65,6 +65,14 @@ type taxView struct {
 
 	// Export readiness flags
 	HasVerificationDetails bool // DeclarantName + VerificationPlace both set
+
+	// Advance tax entries whose FY doesn't match the import FY — excluded
+	// from the computation but shown as a warning so the user understands
+	// why their totals don't match a naive sum of the AIS table.
+	ExcludedAdvanceTax []ais.AdvanceTaxEntry
+
+	// Form 16 documents on file for this FY (archived PDFs).
+	Form16Docs []store.Form16Document
 }
 
 // TDSRecon is one row in the TDS reconciliation table: AIS TDS per deductor
@@ -148,6 +156,8 @@ func (s *Server) handleTax(w http.ResponseWriter, r *http.Request) {
 				v.CGSell += tr.SellValue
 			}
 		}
+
+		v.Form16Docs, _ = s.store.ListForm16DocumentsForFY(ctx, im.FYStartYear)
 
 		v.TaxBreakdown = tax.Compute(tax.Input{
 			GrossSalary:     v.TotalSalary,
@@ -245,6 +255,23 @@ func (s *Server) handleTaxAISUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check for advance tax entries belonging to a different FY — these
+	// are included in the AIS but shouldn't count toward this FY's
+	// computation. Surface as a warning so the user isn't confused.
+	var excluded []string
+	for _, at := range parsed.AdvanceTax {
+		if ais.FYStartYear(at.FY) != fyStart {
+			excluded = append(excluded, fmt.Sprintf("%s (%s, %s)", at.MinorHead, at.FY, formatMoneyPlain(at.Total)))
+		}
+	}
+
+	if len(excluded) > 0 {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"ok":true,"message":"AIS imported successfully","warning":"%d tax payment(s) for a different FY excluded from computation: %s","reload":true}`,
+			len(excluded), strings.Join(excluded, ", "))
+		return
+	}
+
 	jsonOK(w, "AIS imported successfully")
 }
 
@@ -272,7 +299,11 @@ func (s *Server) populateTaxView(ctx context.Context, v *taxView, parsed *ais.Pa
 		v.TotalDividends += d.Amount
 	}
 	for _, at := range parsed.AdvanceTax {
-		v.TotalAdvanceTax += at.Total
+		if ais.FYStartYear(at.FY) == fyStartYear {
+			v.TotalAdvanceTax += at.Total
+		} else {
+			v.ExcludedAdvanceTax = append(v.ExcludedAdvanceTax, at)
+		}
 	}
 
 	employerTDS, _ := s.store.GetFYEmployerTDS(ctx, fyStartYear)
@@ -291,7 +322,7 @@ func (s *Server) populateTaxView(ctx context.Context, v *taxView, parsed *ais.Pa
 		}
 
 		if tds.Section == "192" {
-			if emp, ok := matchEmployerTDS(tds.Deductor, tdsByEmployer); ok {
+			if emp, ok := store.MatchEmployerTDS(tds.Deductor, tdsByEmployer); ok {
 				recon.CrestoTDS = emp.TDS
 				recon.HasPayslips = true
 				recon.GapAmount = tds.TDS - emp.TDS
@@ -329,20 +360,6 @@ func jsonError(w http.ResponseWriter, status int, msg string) {
 func jsonOK(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, `{"ok":true,"message":%q}`, msg)
-}
-
-func matchEmployerTDS(aisName string, employers map[string]store.EmployerTDS) (store.EmployerTDS, bool) {
-	aisUpper := strings.ToUpper(strings.TrimSpace(aisName))
-	for name, emp := range employers {
-		empUpper := strings.ToUpper(strings.TrimSpace(name))
-		if aisUpper == empUpper {
-			return emp, true
-		}
-		if strings.Contains(aisUpper, empUpper) || strings.Contains(empUpper, aisUpper) {
-			return emp, true
-		}
-	}
-	return store.EmployerTDS{}, false
 }
 
 // handleTaxKiteUpload accepts a Kite Console Tax P&L XLSX file, parses it,
